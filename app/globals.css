@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #09090b;
+}
+
+/* blur token default */
+.token-blur {
+  filter: blur(6px);
+  user-select: none;
+  transition: filter 0.2s ease;
+}
+.token-blur.revealed {
+  filter: blur(0);
+  user-select: text;
+}
+
+/* skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  animation: shimmer 1.4s linear infinite;
+  background: linear-gradient(90deg, #27272a 25%, #3f3f46 50%, #27272a 75%);
+  background-size: 800px 100%;
+}
