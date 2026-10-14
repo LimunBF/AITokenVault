@@ -7,7 +7,8 @@ import { useToast } from '@/components/Toaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { EmptyState } from '@/components/EmptyState';
 import { t } from '@/lib/strings';
-import { authFetch } from '@/lib/api';
+import { authFetch, SUPABASE_URL } from '@/lib/api';
+import { PendingStatus } from '@/components/PendingStatus';
 
 const STATUS_STYLE = {
   pending: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
@@ -22,6 +23,7 @@ export default function AdminUsersPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingUser, setDeletingUser] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [loadError, setLoadError] = useState('');
   const toast = useToast();
 
   useEffect(() => {
@@ -32,32 +34,54 @@ export default function AdminUsersPage() {
 
   async function fetchUsers() {
     setLoading(true);
-    const res = await authFetch('/api/admin/users');
-    if (res.ok) {
-      setUsers(await res.json());
-    } else {
-      toast.show('Gagal fetch users.', 'error');
+    setLoadError('');
+    try {
+      const res = await authFetch('/api/admin/users');
+      if (res.ok) {
+        setUsers(await res.json());
+      } else {
+        const body = await res.json().catch(() => null);
+        setLoadError((body && body.error) || `Gagal fetch users (${res.status}).`);
+      }
+    } catch (err) {
+      // authFetch punya timeout 20 detik — kalau kena, jelasin ke user.
+      setLoadError(
+        err?.name === 'TimeoutError' || err?.name === 'AbortError'
+          ? t.serverTimeout
+          : `${t.requestFailed} (${err.message})`
+      );
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleUserAction(userId, action) {
     setBusyId(userId);
-    const res = await authFetch('/api/admin/users', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, action }),
-    });
-    setBusyId(null);
+    try {
+      const res = await authFetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, action }),
+      });
 
-    if (res.ok) {
-      if (action === 'approve') toast.show(t.approveSuccess, 'success');
-      if (action === 'reject') toast.show(t.rejectSuccess, 'success');
-      if (action === 'delete') toast.show(t.deleteUserSuccess, 'success');
-      fetchUsers();
-    } else {
-      const body = await res.json().catch(() => ({}));
-      toast.show(body.error || 'Gagal memproses user.', 'error');
+      if (res.ok) {
+        if (action === 'approve') toast.show(t.approveSuccess, 'success');
+        if (action === 'reject') toast.show(t.rejectSuccess, 'success');
+        if (action === 'delete') toast.show(t.deleteUserSuccess, 'success');
+        fetchUsers();
+      } else {
+        const body = await res.json().catch(() => null);
+        toast.show((body && body.error) || 'Gagal memproses user.', 'error');
+      }
+    } catch (err) {
+      toast.show(
+        err?.name === 'TimeoutError' || err?.name === 'AbortError'
+          ? t.serverTimeout
+          : `${t.requestFailed} (${err.message})`,
+        'error'
+      );
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -72,6 +96,7 @@ export default function AdminUsersPage() {
       <div className="mx-auto max-w-6xl px-4 py-8">
         <div className="skeleton mb-6 h-10 w-56 rounded-xl" />
         <div className="skeleton h-64 w-full rounded-2xl" />
+        <PendingStatus active serverUrl={SUPABASE_URL} />
       </div>
     );
   }
@@ -84,6 +109,23 @@ export default function AdminUsersPage() {
       animate={{ opacity: 1, y: 0 }}
       className="mx-auto max-w-6xl px-4 py-8"
     >
+      {loadError && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 rounded-xl border border-red-500/40 bg-red-950/50 px-4 py-3 text-sm text-red-300"
+        >
+          {loadError}
+          <button
+            type="button"
+            onClick={fetchUsers}
+            className="ml-2 underline hover:text-red-200"
+          >
+            Coba lagi
+          </button>
+        </motion.div>
+      )}
+
       <div className="mb-8 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="text-3xl font-bold">

@@ -12,6 +12,7 @@ export function PasswordInput({
   placeholder = '••••••••',
   minLength,
   autoComplete = 'current-password',
+  disabled =false,
 }) {
   const [visible, setVisible] = useState(false);
   const label = visible ? t.hidePassword : t.showPassword;
@@ -24,17 +25,19 @@ export function PasswordInput({
         required
         minLength={minLength}
         autoComplete={autoComplete}
+        disabled={disabled}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-violet-500/25 bg-zinc-900/70 px-3 py-2 pr-11 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60"
+        className="w-full rounded-lg border border-violet-500/25 bg-zinc-900/70 px-3 py-2 pr-11 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60 disabled:opacity-60"
       />
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setVisible((v) => !v)}
         aria-label={label}
         title={label}
-        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-zinc-400 transition-colors hover:text-violet-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-zinc-400 transition-colors hover:text-violet-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:opacity-60"
       >
         {visible ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

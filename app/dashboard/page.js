@@ -10,7 +10,9 @@ import { ProviderCard } from '@/components/ProviderCard';
 import { SkeletonList } from '@/components/Skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { t } from '@/lib/strings';
-import { authFetch } from '@/lib/api';
+import { authFetch, SUPABASE_URL } from '@/lib/api';
+import { withTimeout, isTimeoutError } from '@/lib/async-utils';
+import { PendingStatus } from '@/components/PendingStatus';
 import { useGuard } from '@/hooks/use-guard';
 
 export default function DashboardPage() {
@@ -22,6 +24,7 @@ export default function DashboardPage() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingProvider, setDeletingProvider] = useState(null);
+  const [loadError, setLoadError] = useState('');
   const toast = useToast();
 
   useEffect(() => {
@@ -29,18 +32,27 @@ export default function DashboardPage() {
 
     async function fetchData() {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('providers')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      setLoadError('');
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from('providers')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
+          15000
+        );
 
-      if (error) {
-        toast.show(t.offline, 'error');
-      } else {
-        setProviders(data || []);
+        if (error) {
+          setLoadError(error.message || t.offline);
+        } else {
+          setProviders(data || []);
+        }
+      } catch (err) {
+        setLoadError(isTimeoutError(err) ? t.serverTimeout : `${t.requestFailed} (${err.message})`);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,8 +158,21 @@ export default function DashboardPage() {
       </div>
 
       {/* Content */}
+      {loadError && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 rounded-xl border border-red-500/40 bg-red-950/50 px-4 py-3 text-sm text-red-300"
+        >
+          {loadError}
+        </motion.div>
+      )}
+
       {loading ? (
-        <SkeletonList count={3} />
+        <>
+          <SkeletonList count={3} />
+          <PendingStatus active serverUrl={SUPABASE_URL} />
+        </>
       ) : filtered.length === 0 ? (
         <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
           <EmptyState

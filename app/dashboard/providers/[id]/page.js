@@ -11,11 +11,15 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { TokenReveal } from '@/components/TokenReveal';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonList } from '@/components/Skeleton';
+import { PendingStatus } from '@/components/PendingStatus';
 import { t } from '@/lib/strings';
-import { authFetch } from '@/lib/api';
+import { authFetch, SUPABASE_URL } from '@/lib/api';
+import { withTimeout, isTimeoutError } from '@/lib/async-utils';
+
+const DB_TIMEOUT_MS = 15000;
 
 const inputCls =
-  'mt-1 w-full rounded-xl border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60';
+  'mt-1 w-full rounded-xl border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60 disabled:opacity-60';
 
 export default function ProviderDetailPage() {
   const { id } = useParams();
@@ -34,35 +38,51 @@ export default function ProviderDetailPage() {
   const [tokenStatus, setTokenStatus] = useState('active');
   const [tokenNotes, setTokenNotes] = useState('');
   const [savingToken, setSavingToken] = useState(false);
+  const [tokenError, setTokenError] = useState('');
+  const [showTokenValue, setShowTokenValue] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     if (!ready || !user) return;
 
     async function fetchData() {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('providers')
-        .select('*')
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .single();
+      setLoadError('');
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from('providers')
+            .select('*')
+            .eq('id', id)
+            .eq('user_id', user.id)
+            .single(),
+          DB_TIMEOUT_MS
+        );
 
-      if (error) {
-        router.replace('/dashboard');
-        return;
+        if (error) {
+          router.replace('/dashboard');
+          return;
+        }
+
+        setProvider(data);
+
+        const { data: tokenData, error: tokenError } = await withTimeout(
+          supabase
+            .from('tokens')
+            .select('*')
+            .eq('provider_id', id)
+            .is('deleted_at', null)
+            .order('created_at', { ascending:false }),
+          DB_TIMEOUT_MS
+        );
+
+        if (!tokenError) setTokens(tokenData || []);
+      } catch (err) {
+        // Jangan diem-diem redirect — kasih tau user kenapa halaman kosong.
+        setLoadError(isTimeoutError(err) ? t.serverTimeout : `${t.requestFailed} (${err.message})`);
+      } finally {
+        setLoading(false);
       }
-
-      setProvider(data);
-
-      const { data: tokenData, error: tokenError } = await supabase
-        .from('tokens')
-        .select('*')
-        .eq('provider_id', id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending:false });
-
-      if (!tokenError) setTokens(tokenData || []);
-      setLoading(false);
     }
     fetchData();
   }, [ready, user, id, router]);
@@ -72,31 +92,41 @@ export default function ProviderDetailPage() {
     if (!tokenLabel || !tokenValue) return;
 
     setSavingToken(true);
-    const res = await authFetch('/api/tokens', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider_id: id,
-        label: tokenLabel,
-        token: tokenValue,
-        status: tokenStatus,
-        notes: tokenNotes || null,
-      }),
-    });
-    setSavingToken(false);
+    setTokenError('');
+    try {
+      const res = await authFetch('/api/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider_id: id,
+          label: tokenLabel,
+          token: tokenValue,
+          status: tokenStatus,
+          notes: tokenNotes || null,
+        }),
+      });
 
-    if (res.ok) {
-      const newToken = await res.json();
-      setTokens((prev) => [newToken, ...prev]);
-      setTokenLabel('');
-      setTokenValue('');
-      setTokenStatus('active');
-      setTokenNotes('');
-      setShowTokenModal(false);
-      toast.show(t.addTokenSuccess, 'success');
-    } else {
-      const err = await res.json().catch(() => ({}));
-      toast.show(err.error || t.addTokenFailed, 'error');
+      if (res.ok) {
+        const newToken = await res.json();
+        setTokens((prev) => [newToken, ...prev]);
+        setTokenLabel('');
+        setTokenValue('');
+        setTokenStatus('active');
+        setTokenNotes('');
+        setShowTokenModal(false);
+        toast.show(t.addTokenSuccess, 'success');
+      } else {
+        const body = await res.json().catch(() => null);
+        setTokenError((body && body.error) || t.addTokenFailed);
+      }
+    } catch (err) {
+      setTokenError(
+        err?.name === 'TimeoutError' || err?.name === 'AbortError'
+          ? t.serverTimeout
+          : `${t.requestFailed} (${err.message})`
+      );
+    } finally {
+      setSavingToken(false);
     }
   }
 
@@ -360,14 +390,39 @@ export default function ProviderDetailPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-300">{t.tokenValue}</label>
-                  <input
-                    type="text"
-                    required
-                    value={tokenValue}
-                    onChange={(e) => setTokenValue(e.target.value)}
-                    placeholder="sk-..."
-                    className={`${inputCls} font-mono`}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showTokenValue ? 'text' : 'password'}
+                      required
+                      disabled={savingToken}
+                      value={tokenValue}
+                      onChange={(e) => setTokenValue(e.target.value)}
+                      placeholder="sk-..."
+                      autoComplete="off"
+                      className={`${inputCls} pr-11 font-mono`}
+                    />
+                    <button
+                      type="button"
+                      disabled={savingToken}
+                      onClick={() => setShowTokenValue((v) => !v)}
+                      aria-label={showTokenValue ? t.hidePassword : t.showPassword}
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-zinc-400 transition-colors hover:text-cyan-300 disabled:opacity-60"
+                    >
+                      {showTokenValue ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                          <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                          <path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                          <line x1="2" y1="2" x2="22" y2="22" />
+                        </svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-300">{t.tokenStatus}</label>
@@ -389,22 +444,34 @@ export default function ProviderDetailPage() {
                 </div>
               </div>
 
+              {tokenError && (
+                <div className="mt-4 rounded-xl border border-red-500/40 bg-red-950/50 px-3 py-2 text-sm text-red-300">
+                  {tokenError}
+                </div>
+              )}
+
               <div className="mt-6 flex justify-end gap-3">
                 <button
                   type="button"
+                  disabled={savingToken}
                   onClick={() => setShowTokenModal(false)}
-                  className="rounded-xl border border-zinc-600/60 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
+                  className="rounded-xl border border-zinc-600/60 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-50"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={savingToken}
-                  className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition-all hover:brightness-110 disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition-all hover:brightness-110 disabled:opacity-50"
                 >
-                  {savingToken ? t.loading : t.save}
+                  {savingToken && (
+                    <span aria-hidden className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  )}
+                  {savingToken ? t.connecting : t.save}
                 </button>
               </div>
+
+              <PendingStatus active={savingToken} serverUrl={SUPABASE_URL} />
             </motion.form>
           </motion.div>
         )}

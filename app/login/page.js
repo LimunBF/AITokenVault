@@ -7,6 +7,11 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { t } from '@/lib/strings';
 import { PasswordInput } from '@/components/PasswordInput';
+import { PendingStatus } from '@/components/PendingStatus';
+import { SUPABASE_URL } from '@/lib/api';
+import { withTimeout, isTimeoutError } from '@/lib/async-utils';
+
+const AUTH_TIMEOUT_MS = 15000;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,59 +19,77 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setTimedOut(false);
     setLoading(true);
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      // Batas waktu: kalau Supabase gak jawab dalam 15 detik, jangan nunggu selamanya.
+      const { data, error: authError } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        AUTH_TIMEOUT_MS
+      );
 
-    if (authError) {
-      // Pesan jujur: jangan bilang "password salah" kalau sebabnya beda.
-      const msg = (authError.message || '').toLowerCase();
-      if (msg.includes('not confirmed')) setError(t.emailNotConfirmed);
-      else if (msg.includes('rate limit') || authError.status === 429) setError(t.rateLimited);
-      else setError(t.loginFailed);
+      if (authError) {
+        const msg = (authError.message || '').toLowerCase();
+        if (msg.includes('not confirmed')) setError(t.emailNotConfirmed);
+        else if (msg.includes('rate limit') || authError.status === 429) setError(t.rateLimited);
+        else setError(t.loginFailed);
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile, error: profileError } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('status, role, deleted_at')
+          .eq('id', data.user.id)
+          .maybeSingle(),
+        AUTH_TIMEOUT_MS
+      );
+
+      if (profileError) {
+        setError(`Gagal baca profile: ${profileError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      if (!profile) {
+        setError('Row profile gak ketemu di tabel profiles. Jalanin ulang query INSERT di SQL Editor.');
+        setLoading(false);
+        return;
+      }
+
+      if (profile.deleted_at || profile.status === 'rejected') {
+        await supabase.auth.signOut();
+        setError(t.rejectedMessage);
+        setLoading(false);
+        return;
+      }
+
+      if (profile.status === 'pending') {
+        await supabase.auth.signOut();
+        setError(t.pendingMessage);
+        setLoading(false);
+        return;
+      }
+
+      // status === 'active' -> gas masuk. loading sengaja dibiarkan nyala
+      // sampai navigasi selesai, biar gak kedip balik ke bentuk awal.
+      router.push('/dashboard');
+    } catch (err) {
+      if (isTimeoutError(err)) {
+        setError(t.serverTimeout);
+        setTimedOut(true);
+      } else {
+        setError(`${t.requestFailed} (${err.message})`);
+      }
       setLoading(false);
-      return;
     }
-
-    // Sumber kebenaran = tabel profiles, bukan asumsi dari error auth.
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('status, role, deleted_at')
-      .eq('id', data.user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      setError(`Gagal baca profile: ${profileError.message}`);
-      setLoading(false);
-      return;
-    }
-
-    if (!profile) {
-      setError('Row profile gak ketemu di tabel profiles. Jalanin ulang query INSERT di SQL Editor.');
-      setLoading(false);
-      return;
-    }
-
-    if (profile.deleted_at || profile.status === 'rejected') {
-      await supabase.auth.signOut();
-      setError(t.rejectedMessage);
-      setLoading(false);
-      return;
-    }
-
-    if (profile.status === 'pending') {
-      await supabase.auth.signOut();
-      setError(t.pendingMessage);
-      setLoading(false);
-      return;
-    }
-
-    // status === 'active' -> gas masuk.
-    router.push('/dashboard');
   }
 
   return (
@@ -115,9 +138,10 @@ export default function LoginPage() {
               id="email"
               type="email"
               required
+              disabled={loading}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60"
+              className="mt-1 w-full rounded-lg border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60 disabled:opacity-60"
               placeholder="nama@email.com"
             />
           </div>
@@ -132,6 +156,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
+                disabled={loading}
               />
             </div>
           </div>
@@ -140,10 +165,26 @@ export default function LoginPage() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 py-2.5 font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 py-2.5 font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110 disabled:opacity-70"
           >
-            {loading ? t.loading : t.loginButton}
+            {loading && (
+              <span aria-hidden className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            )}
+            {loading ? t.connecting : t.loginButton}
           </motion.button>
+
+          {/* Detik berjalan + status koneksi, biar gak terkesan nge-freeze */}
+          <PendingStatus active={loading} serverUrl={SUPABASE_URL} />
+
+          {timedOut && (
+            <button
+              type="button"
+              onClick={() => { setError(''); setTimedOut(false); }}
+              className="w-full rounded-xl border border-amber-500/40 py-2 text-sm text-amber-300 transition-colors hover:bg-amber-500/15"
+            >
+              Coba Lagi
+            </button>
+          )}
         </form>
 
         <p className="mt-6 text-center text-sm text-zinc-400">

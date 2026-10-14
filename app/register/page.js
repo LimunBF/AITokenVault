@@ -6,6 +6,11 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { t } from '@/lib/strings';
 import { PasswordInput } from '@/components/PasswordInput';
+import { PendingStatus } from '@/components/PendingStatus';
+import { SUPABASE_URL } from '@/lib/api';
+import { withTimeout, isTimeoutError } from '@/lib/async-utils';
+
+const AUTH_TIMEOUT_MS = 15000;
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -14,10 +19,12 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setTimedOut(false);
 
     // Validasi di trust boundary: cek lokal dulu sebelum hit Supabase.
     if (password.length < 6) {
@@ -30,17 +37,30 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    const { error: signUpError } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
+    try {
+      const { error: signUpError } = await withTimeout(
+        supabase.auth.signUp({ email, password }),
+        AUTH_TIMEOUT_MS
+      );
+      setLoading(false);
 
-    if (signUpError) {
-      const msg = (signUpError.message || '').toLowerCase();
-      if (msg.includes('rate limit') || signUpError.status === 429) setError(t.rateLimited);
-      else setError(signUpError.message || t.registerFailed);
-      return;
+      if (signUpError) {
+        const msg = (signUpError.message || '').toLowerCase();
+        if (msg.includes('rate limit') || signUpError.status === 429) setError(t.rateLimited);
+        else setError(signUpError.message || t.registerFailed);
+        return;
+      }
+
+      setSuccess(true);
+    } catch (err) {
+      if (isTimeoutError(err)) {
+        setError(t.serverTimeout);
+        setTimedOut(true);
+      } else {
+        setError(`${t.requestFailed} (${err.message})`);
+      }
+      setLoading(false);
     }
-
-    setSuccess(true);
   }
 
   if (success) {
@@ -125,9 +145,10 @@ export default function RegisterPage() {
               id="email"
               type="email"
               required
+              disabled={loading}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60"
+              className="mt-1 w-full rounded-lg border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60 disabled:opacity-60"
               placeholder="nama@email.com"
             />
           </div>
@@ -144,6 +165,7 @@ export default function RegisterPage() {
                 minLength={6}
                 autoComplete="new-password"
                 placeholder="Minimal 6 karakter"
+                disabled={loading}
               />
             </div>
           </div>
@@ -160,6 +182,7 @@ export default function RegisterPage() {
                 minLength={6}
                 autoComplete="new-password"
                 placeholder="Ulangi password"
+                disabled={loading}
               />
             </div>
             {confirm.length > 0 && password !== confirm && (
@@ -171,10 +194,25 @@ export default function RegisterPage() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-gradient-to-r from-cyan-500 via-violet-600 to-fuchsia-600 py-2.5 font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-violet-600 to-fuchsia-600 py-2.5 font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110 disabled:opacity-70"
           >
-            {loading ? t.loading : t.registerButton}
+            {loading && (
+              <span aria-hidden className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            )}
+            {loading ? t.connecting : t.registerButton}
           </motion.button>
+
+          <PendingStatus active={loading} serverUrl={SUPABASE_URL} />
+
+          {timedOut && (
+            <button
+              type="button"
+              onClick={() => { setError(''); setTimedOut(false); }}
+              className="w-full rounded-xl border border-amber-500/40 py-2 text-sm text-amber-300 transition-colors hover:bg-amber-500/15"
+            >
+              Coba Lagi
+            </button>
+          )}
         </form>
 
         <p className="mt-6 text-center text-sm text-zinc-400">

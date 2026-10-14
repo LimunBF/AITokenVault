@@ -2,14 +2,23 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { withTimeout } from '@/lib/async-utils';
 
 const AuthCtx = createContext({ user: null, profile: null, loading: true });
 
 async function fetchProfile(userId) {
   // maybeSingle: 0 row = null, bukan error (RLS bisa sembunyikan row).
-  const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-  if (error) return null;
-  return data;
+  // Timeout 8 detik: kalau Supabase gak jawab, jangan gantung selamanya.
+  try {
+    const { data, error } = await withTimeout(
+      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      8000
+    );
+    if (error) return null;
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export function AuthProvider({ children }) {

@@ -15,12 +15,12 @@ export function Toaster() {
   const [toasts, setToasts] = useState([]);
 
   const show = useCallback((message, type = 'success') => {
-    const id = ++toastId;
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  }, []);
+      const id = ++toastId;
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, type === 'error' ? 6000 : 3000);
+    },[]);
 
   return (
     <ToastCtx.Provider value={{ show }}>
@@ -33,7 +33,7 @@ export function Toaster() {
                 initial={{ opacity: 0, y: 16, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                className={`pointer-events-auto rounded-xl px-4 py-3 text-sm font-medium shadow-lg ${
+                className={`pointer-events-auto flex items-start gap-2 rounded-xl px-4 py-3 text-sm font-medium shadow-lg ${
                   toast.type === 'success'
                     ? 'bg-emerald-600 text-white'
                     : toast.type === 'error'
@@ -41,7 +41,10 @@ export function Toaster() {
                     : 'bg-zinc-800 text-zinc-100'
                 }`}
               >
-                {toast.message}
+                <span aria-hidden className="mt-0.5 shrink-0">
+                  {toast.type === 'success' ? '✓' : toast.type === 'error' ? '!' : 'i'}
+                </span>
+                <span>{toast.message}</span>
               </motion.div>
             ))}
           </AnimatePresence>
