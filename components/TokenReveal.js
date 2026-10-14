@@ -5,11 +5,18 @@ import { motion } from 'framer-motion';
 import { t } from '@/lib/strings';
 import { authFetch } from '@/lib/api';
 
+const STATUS_STYLE = {
+  active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  expired: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  out_of_quota: 'bg-red-500/20 text-red-300 border-red-500/30',
+};
+
 export function TokenReveal({ token }) {
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [plaintext, setPlaintext] = useState('');
+  const [error, setError] = useState('');
 
   async function handleReveal() {
     if (revealed) {
@@ -19,23 +26,31 @@ export function TokenReveal({ token }) {
       return;
     }
     setLoading(true);
+    setError('');
     try {
       const res = await authFetch(`/api/tokens/${token.id}`);
-      if (!res.ok) throw new Error('gagal reveal');
+      if (!res.ok) {
+        setError('Gagal ambil token. Coba login ulang.');
+        return;
+      }
       const data = await res.json();
       setPlaintext(data.token);
       setRevealed(true);
     } catch {
-      setPlaintext('');
+      setError('Gagal ambil token. Cek koneksi lo.');
     } finally {
       setLoading(false);
     }
   }
 
   async function copyToClipboard() {
-    await navigator.clipboard.writeText(plaintext);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(plaintext);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('Browser nolak akses clipboard.');
+    }
   }
 
   const statusLabel =
@@ -44,16 +59,15 @@ export function TokenReveal({ token }) {
     : t.statusOutOfQuota;
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition-colors hover:border-zinc-700">
+    <motion.div
+      layout
+      className="card-glass rounded-2xl border border-violet-500/15 p-4 transition-colors hover:border-violet-500/40"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-white">{token.label}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              token.status === 'active' ? 'bg-emerald-600/20 text-emerald-400'
-              : token.status === 'expired' ? 'bg-amber-600/20 text-amber-400'
-              : 'bg-red-600/20 text-red-400'
-            }`}>
+          <p className="truncate font-medium text-white">{token.label}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[token.status] || STATUS_STYLE.active}`}>
               {statusLabel}
             </span>
             {token.notes && (
@@ -62,33 +76,40 @@ export function TokenReveal({ token }) {
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={handleReveal}
             disabled={loading}
-            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-50"
+            className="rounded-lg border border-violet-500/30 px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:bg-violet-500/15 disabled:opacity-50"
           >
             {loading ? t.loading : revealed ? t.hide : t.reveal}
-          </button>
-          <button
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={copyToClipboard}
             disabled={!revealed}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              copied ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 disabled:opacity-40'
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+              copied
+                ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white shadow-lg shadow-emerald-900/30'
+                : 'border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/15 disabled:opacity-40'
             }`}
           >
             {copied ? t.copied : t.copy}
-          </button>
+          </motion.button>
         </div>
       </div>
+
+      {error && <p className="mt-2 text-xs text-amber-400">{error}</p>}
+
       {revealed && plaintext && (
-        <motion.p
+        <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-3 break-all pb-6 font-mono text-sm text-emerald-400"
+          className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-950/25 px-3 py-2"
         >
-          {plaintext}
-        </motion.p>
+          <p className="break-all pb-4 font-mono text-sm text-emerald-300">{plaintext}</p>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }

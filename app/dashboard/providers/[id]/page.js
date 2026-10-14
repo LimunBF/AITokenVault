@@ -14,10 +14,13 @@ import { SkeletonList } from '@/components/Skeleton';
 import { t } from '@/lib/strings';
 import { authFetch } from '@/lib/api';
 
+const inputCls =
+  'mt-1 w-full rounded-xl border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60';
+
 export default function ProviderDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user, profile, loading: authLoading } = useGuard();
+  const { user, profile, ready } = useGuard();
   const [provider, setProvider] = useState(null);
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +29,6 @@ export default function ProviderDetailPage() {
   const [deleteToken, setDeleteToken] = useState(null);
   const toast = useToast();
 
-  // Form token
   const [tokenLabel, setTokenLabel] = useState('');
   const [tokenValue, setTokenValue] = useState('');
   const [tokenStatus, setTokenStatus] = useState('active');
@@ -34,7 +36,7 @@ export default function ProviderDetailPage() {
   const [savingToken, setSavingToken] = useState(false);
 
   useEffect(() => {
-    if (!user || profile?.status !== 'active') return;
+    if (!ready || !user) return;
 
     async function fetchData() {
       setLoading(true);
@@ -57,13 +59,13 @@ export default function ProviderDetailPage() {
         .select('*')
         .eq('provider_id', id)
         .is('deleted_at', null)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending:false });
 
       if (!tokenError) setTokens(tokenData || []);
       setLoading(false);
     }
     fetchData();
-  }, [user, profile, id, router]);
+  }, [ready, user, id, router]);
 
   async function handleAddToken(e) {
     e.preventDefault();
@@ -81,7 +83,6 @@ export default function ProviderDetailPage() {
         notes: tokenNotes || null,
       }),
     });
-
     setSavingToken(false);
 
     if (res.ok) {
@@ -94,7 +95,7 @@ export default function ProviderDetailPage() {
       setShowTokenModal(false);
       toast.show(t.addTokenSuccess, 'success');
     } else {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       toast.show(err.error || t.addTokenFailed, 'error');
     }
   }
@@ -137,7 +138,14 @@ export default function ProviderDetailPage() {
     setDeleteToken(null);
   }
 
-  if (authLoading || !user) return null;
+  if (!ready) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-8">
+        <div className="skeleton mb-6 h-8 w-32 rounded-xl" />
+        <SkeletonList count={2} />
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -147,7 +155,7 @@ export default function ProviderDetailPage() {
     >
       <Link
         href="/dashboard"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-violet-300"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -160,40 +168,58 @@ export default function ProviderDetailPage() {
       ) : provider ? (
         <>
           {/* Provider header */}
-          <div className="flex flex-col justify-between gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:flex-row sm:items-start">
-            <div>
-              <h1 className="text-2xl font-bold text-white">{provider.name}</h1>
-              <a
-                href={provider.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 inline-block text-sm text-violet-400 hover:text-violet-300 break-all"
-              >
-                {provider.url}
-              </a>
-              {provider.category && (
-                <span className="mt-3 inline-block rounded-full bg-violet-600/20 px-2.5 py-0.5 text-xs font-medium text-violet-400">
-                  {provider.category}
-                </span>
-              )}
-              {provider.model && <p className="mt-2 text-sm text-zinc-400">Model: {provider.model}</p>}
-              {provider.notes && <p className="mt-2 text-sm text-zinc-500">{provider.notes}</p>}
-            </div>
-            <div className="flex gap-2">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="card-glass relative overflow-hidden rounded-3xl border border-violet-500/20 p-6 shadow-2xl shadow-violet-950/40"
+          >
+            <div aria-hidden className="ring-gradient absolute inset-x-0 top-0 h-[2px]" />
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold text-white">{provider.name}</h1>
+                <a
+                  href={provider.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 break-all text-sm text-cyan-400 hover:text-cyan-300"
+                >
+                  {provider.url}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" strokeLinecap="round" />
+                    <path d="M15 3h6v6M10 14L21 3" strokeLinecap="round" />
+                  </svg>
+                </a>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {provider.category && (
+                    <span className="rounded-full border border-violet-500/30 bg-violet-500/20 px-2.5 py-0.5 text-xs font-medium text-violet-300">
+                      {provider.category}
+                    </span>
+                  )}
+                  {provider.model && (
+                    <span className="rounded-full border border-fuchsia-500/30 bg-fuchsia-500/15 px-2.5 py-0.5 text-xs text-fuchsia-300">
+                      {provider.model}
+                    </span>
+                  )}
+                </div>
+                {provider.notes && <p className="mt-3 text-sm text-zinc-400">{provider.notes}</p>}
+              </div>
               <button
                 onClick={() => setShowDeleteModal(true)}
-                className="rounded-lg border border-red-400/40 px-4 py-2 text-sm text-red-400 hover:bg-red-900/20 transition-colors"
+                className="shrink-0 rounded-xl border border-red-500/40 px-4 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/15"
               >
                 {t.delete}
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Tags */}
           {provider.tags?.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1.5">
               {provider.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-400">
+                <span
+                  key={tag}
+                  className="rounded-full border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-0.5 text-xs text-zinc-400 transition-colors hover:border-fuchsia-500/40 hover:text-fuchsia-300"
+                >
                   #{tag}
                 </span>
               ))}
@@ -203,13 +229,25 @@ export default function ProviderDetailPage() {
           {/* Tokens */}
           <div className="mt-8">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Token</h2>
-              <button
+              <h2 className="text-lg font-semibold text-white">
+                Token
+                {tokens.length > 0 && (
+                  <span className="ml-2 rounded-full border border-cyan-500/30 bg-cyan-500/15 px-2 py-0.5 text-xs font-medium text-cyan-300">
+                    {tokens.length}
+                  </span>
+                )}
+              </h2>
+              <motion.button
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => setShowTokenModal(true)}
-                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 transition-colors"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110"
               >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
                 {t.addToken}
-              </button>
+              </motion.button>
             </div>
 
             {tokens.length === 0 ? (
@@ -220,7 +258,7 @@ export default function ProviderDetailPage() {
                 action={
                   <button
                     onClick={() => setShowTokenModal(true)}
-                    className="rounded-lg bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-500 transition-colors"
+                    className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110"
                   >
                     {t.addToken}
                   </button>
@@ -232,6 +270,7 @@ export default function ProviderDetailPage() {
                   {tokens.map((token) => (
                     <motion.div
                       key={token.id}
+                      layout
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
@@ -241,7 +280,7 @@ export default function ProviderDetailPage() {
                         <select
                           value={token.status}
                           onChange={(e) => handleStatusChange(token, e.target.value)}
-                          className="absolute bottom-3 left-3 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-200 focus:!outline-none"
+                          className="absolute bottom-3 left-3 rounded-md border border-violet-500/30 bg-zinc-900/90 px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
                         >
                           <option value="active">{t.statusActive}</option>
                           <option value="expired">{t.statusExpired}</option>
@@ -249,7 +288,7 @@ export default function ProviderDetailPage() {
                         </select>
                         <button
                           onClick={() => setDeleteToken(token)}
-                          className="absolute right-3 bottom-3 rounded p-1 text-zinc-600 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                          className="absolute bottom-3 right-3 rounded p-1 text-zinc-600 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
                           title={t.delete}
                         >
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -266,7 +305,6 @@ export default function ProviderDetailPage() {
         </>
       ) : null}
 
-      {/* Delete provider modal */}
       <ConfirmModal
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -277,7 +315,6 @@ export default function ProviderDetailPage() {
         danger
       />
 
-      {/* Delete token modal */}
       <ConfirmModal
         open={!!deleteToken}
         onClose={() => setDeleteToken(null)}
@@ -295,7 +332,7 @@ export default function ProviderDetailPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
             onClick={() => setShowTokenModal(false)}
           >
             <motion.form
@@ -303,7 +340,7 @@ export default function ProviderDetailPage() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 12 }}
               transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-              className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl"
+              className="card-glass w-full max-w-md rounded-2xl border border-violet-500/30 p-6 shadow-2xl shadow-violet-950/50"
               onClick={(e) => e.stopPropagation()}
               onSubmit={handleAddToken}
             >
@@ -318,7 +355,7 @@ export default function ProviderDetailPage() {
                     value={tokenLabel}
                     onChange={(e) => setTokenLabel(e.target.value)}
                     placeholder={t.tokenLabelPlaceholder}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+                    className={inputCls}
                   />
                 </div>
                 <div>
@@ -329,16 +366,12 @@ export default function ProviderDetailPage() {
                     value={tokenValue}
                     onChange={(e) => setTokenValue(e.target.value)}
                     placeholder="sk-..."
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+                    className={`${inputCls} font-mono`}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-300">{t.tokenStatus}</label>
-                  <select
-                    value={tokenStatus}
-                    onChange={(e) => setTokenStatus(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
-                  >
+                  <select value={tokenStatus} onChange={(e) => setTokenStatus(e.target.value)} className={inputCls}>
                     <option value="active">{t.statusActive}</option>
                     <option value="expired">{t.statusExpired}</option>
                     <option value="out_of_quota">{t.statusOutOfQuota}</option>
@@ -351,7 +384,7 @@ export default function ProviderDetailPage() {
                     onChange={(e) => setTokenNotes(e.target.value)}
                     rows={2}
                     placeholder="Catatan..."
-                    className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+                    className={inputCls}
                   />
                 </div>
               </div>
@@ -360,16 +393,16 @@ export default function ProviderDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowTokenModal(false)}
-                  className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                  className="rounded-xl border border-zinc-600/60 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={savingToken}
-                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 transition-colors disabled:opacity-50"
+                  className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition-all hover:brightness-110 disabled:opacity-50"
                 >
-                  {savingToken ? t.loading : t.saveToken}
+                  {savingToken ? t.loading : t.save}
                 </button>
               </div>
             </motion.form>

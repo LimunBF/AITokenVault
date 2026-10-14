@@ -20,7 +20,9 @@ export function ConfirmModal({ open, onClose, onConfirm, title, message, confirm
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 12 }}
             transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl"
+            className={`card-glass w-full max-w-md rounded-2xl border p-6 shadow-2xl ${
+              danger ? 'border-red-500/30 shadow-red-950/40' : 'border-violet-500/30 shadow-violet-950/40'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-white">{title}</h3>
@@ -28,7 +30,7 @@ export function ConfirmModal({ open, onClose, onConfirm, title, message, confirm
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={onClose}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                className="rounded-xl border border-zinc-600/60 px-4 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
               >
                 Batal
               </button>
@@ -37,8 +39,10 @@ export function ConfirmModal({ open, onClose, onConfirm, title, message, confirm
                   onConfirm();
                   onClose();
                 }}
-                className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${
-                  danger ? 'bg-red-600 hover:bg-red-500' : 'bg-violet-600 hover:bg-violet-500'
+                className={`rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-lg transition-all ${
+                  danger
+                    ? 'bg-gradient-to-r from-red-600 to-rose-600 shadow-red-900/40 hover:brightness-110'
+                    : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 shadow-violet-900/40 hover:brightness-110'
                 }`}
               >
                 {confirmText}

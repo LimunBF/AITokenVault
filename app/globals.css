@@ -4,14 +4,81 @@
 
 :root {
   color-scheme: dark;
+  --brand-violet: #8b5cf6;
+  --brand-fuchsia: #d946ef;
+  --brand-cyan: #22d3ee;
+  --brand-emerald: #34d399;
 }
 
 html {
   scroll-behavior: smooth;
 }
 
+/* Latar colorful: mesh gradient violet/fuchsia/cyan di atas dasar gelap. */
 body {
-  background: #09090b;
+  background-color: #0a0a16;
+  background-image:
+    radial-gradient(1100px 620px at 8% -12%, rgba(139, 92, 246, 0.30), transparent 62%),
+    radial-gradient(900px 520px at 92% -4%, rgba(34, 211, 238, 0.20), transparent 58%),
+    radial-gradient(820px 640px at 50% 112%, rgba(217, 70, 239, 0.18), transparent 62%);
+  background-attachment: fixed;
+}
+
+@layer utilities {
+  /* Teks gradien buat judul */
+  .text-gradient {
+    background-image: linear-gradient(100deg, #a78bfa 0%, #e879f9 45%, #22d3ee 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Kartu kaca */
+  .card-glass {
+    background: linear-gradient(160deg, rgba(34, 32, 66, 0.85), rgba(18, 18, 38, 0.78));
+    backdrop-filter: blur(12px);
+  }
+
+  .glow-violet { box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.35), 0 14px 44px -14px rgba(139, 92, 246, 0.6); }
+  .glow-cyan { box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 14px 44px -14px rgba(34, 211, 238, 0.55); }
+
+  /* Garis gradien animasi */
+  .ring-gradient {
+    background-image: linear-gradient(120deg, #8b5cf6, #d946ef, #22d3ee, #8b5cf6);
+    background-size: 300% 300%;
+    animation: gradient-shift 6s ease infinite;
+  }
+
+  .animate-fade-up { animation: fade-up 0.5s ease-out both; }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-pop { animation: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  .animate-blob { animation: blob 18s ease-in-out infinite; }
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes blob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(24px, -18px) scale(1.08); }
+  66% { transform: translate(-20px, 14px) scale(0.95); }
 }
 
 /* blur token default */
@@ -32,6 +99,16 @@ body {
 }
 .skeleton {
   animation: shimmer 1.4s linear infinite;
-  background: linear-gradient(90deg, #27272a 25%, #3f3f46 50%, #27272a 75%);
+  background: linear-gradient(90deg, #23233d 25%, #3f3f68 50%, #23233d 75%);
   background-size: 800px 100%;
+}
+
+/* Hormati preferensi user yang matiin animasi */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

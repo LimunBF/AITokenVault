@@ -6,6 +6,11 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { t } from '@/lib/strings';
 
+const CATEGORIES = ['Chatbot', 'Image', 'Video', 'Audio', 'Coding', 'Lainnya'];
+
+const inputCls =
+  'mt-1 w-full rounded-xl border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60';
+
 export default function NewProviderPage() {
   const router = useRouter();
   const [name, setName] = useState('');
@@ -17,21 +22,18 @@ export default function NewProviderPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const categories = ['Chatbot', 'Image', 'Video', 'Audio', 'Coding', 'Lainnya'];
-
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // Get current user
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       router.push('/login');
       return;
     }
 
-    const tagArray = tags.split(',').map((t) => t.trim()).filter((t) => t);
+    const tagArray = tags.split(',').map((s) => s.trim()).filter(Boolean);
 
     const { error: dbError } = await supabase.from('providers').insert({
       user_id: session.user.id,
@@ -59,20 +61,28 @@ export default function NewProviderPage() {
       animate={{ opacity: 1, y: 0 }}
       className="mx-auto max-w-2xl px-4 py-8"
     >
-      <h1 className="text-2xl font-bold text-white">{t.addProvider}</h1>
+      <h1 className="text-2xl font-bold">
+        <span className="text-gradient">{t.addProvider}</span>
+      </h1>
       <p className="mt-1 text-sm text-zinc-400">Isi detail provider AI lo.</p>
 
       {error && (
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-4 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300"
+          className="mt-4 rounded-xl border border-red-500/40 bg-red-950/50 px-4 py-3 text-sm text-red-300"
         >
           {error}
         </motion.div>
       )}
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+      <motion.form
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.08 }}
+        onSubmit={handleSubmit}
+        className="card-glass mt-6 space-y-4 rounded-3xl border border-violet-500/20 p-6 shadow-2xl shadow-violet-950/40"
+      >
         <div>
           <label className="block text-sm font-medium text-zinc-300">{t.providerName}</label>
           <input
@@ -81,7 +91,7 @@ export default function NewProviderPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t.providerNamePlaceholder}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+            className={inputCls}
           />
         </div>
 
@@ -93,19 +103,15 @@ export default function NewProviderPage() {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder={t.providerUrlPlaceholder}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+            className={inputCls}
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-zinc-300">{t.providerCategory}</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
-          >
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
             <option value="">Pilih kategori</option>
-            {categories.map((c) => (
+            {CATEGORIES.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
@@ -118,7 +124,7 @@ export default function NewProviderPage() {
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder={t.providerModelPlaceholder}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+            className={inputCls}
           />
         </div>
 
@@ -129,7 +135,7 @@ export default function NewProviderPage() {
             value={tags}
             onChange={(e) => setTags(e.target.value)}
             placeholder={t.providerTagsExample}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+            className={inputCls}
           />
         </div>
 
@@ -140,18 +146,28 @@ export default function NewProviderPage() {
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Catatan bebas..."
             rows={3}
-            className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+            className={inputCls}
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-violet-600 py-2.5 font-semibold text-white hover:bg-violet-500 transition-colors disabled:opacity-50"
-        >
-          {loading ? t.loading : t.save}
-        </button>
-      </form>
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="rounded-xl border border-zinc-600/60 px-5 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-800"
+          >
+            {t.cancel}
+          </button>
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            type="submit"
+            disabled={loading}
+            className="flex-1 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 py-2.5 font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110 disabled:opacity-50"
+          >
+            {loading ? t.loading : t.save}
+          </motion.button>
+        </div>
+      </motion.form>
     </motion.div>
   );
 }

@@ -8,7 +8,7 @@ export function SkeletonCard() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
+      className="card-glass rounded-2xl border border-violet-500/15 p-5"
     >
       <div className="skeleton h-5 w-1/3 rounded" />
       <div className="skeleton mt-3 h-4 w-2/3 rounded" />

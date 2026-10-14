@@ -1,27 +1,37 @@
 'use client';
 
-// Empty state dengan SVG illustration
+import { motion } from 'framer-motion';
+
+// Empty state dengan ilustrasi gradien + animasi float.
 export function EmptyState({ icon = 'vault', title, description, action }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 px-6 py-16 text-center">
-      <div className="mb-4 text-zinc-600">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="card-glass flex flex-col items-center justify-center rounded-3xl border border-dashed border-violet-500/30 px-6 py-16 text-center"
+    >
+      <motion.div
+        animate={{ y: [0, -8, 0] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+        className="mb-5 inline-flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500/25 via-fuchsia-500/20 to-cyan-500/25 text-violet-300"
+      >
         {icon === 'vault' ? (
-          <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
-            <rect x="12" y="20" width="48" height="36" rx="6" stroke="currentColor" strokeWidth="2.5" />
-            <circle cx="36" cy="38" r="8" stroke="currentColor" strokeWidth="2.5" />
-            <path d="M36 34v8M32 38h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="M28 20v-6M44 20v-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <svg width="44" height="44" viewBox="0 0 72 72" fill="none">
+            <rect x="12" y="20" width="48" height="36" rx="8" stroke="currentColor" strokeWidth="3" />
+            <circle cx="36" cy="38" r="9" stroke="currentColor" strokeWidth="3" />
+            <path d="M36 33v10M31 38h10" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+            <path d="M28 20v-7M44 20v-7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
           </svg>
         ) : (
-          <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
-            <circle cx="36" cy="36" r="24" stroke="currentColor" strokeWidth="2.5" strokeDasharray="6 6" />
-            <path d="M36 24v12l8 8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          <svg width="44" height="44" viewBox="0 0 72 72" fill="none">
+            <circle cx="36" cy="36" r="24" stroke="currentColor" strokeWidth="3" strokeDasharray="7 7" />
+            <path d="M36 24v12l9 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
           </svg>
         )}
-      </div>
-      <h3 className="text-lg font-semibold text-zinc-200">{title}</h3>
-      <p className="mt-1 max-w-sm text-sm text-zinc-500">{description}</p>
+      </motion.div>
+      <h3 className="text-lg font-semibold text-white">{title}</h3>
+      <p className="mt-1 max-w-sm text-sm text-zinc-400">{description}</p>
       {action && <div className="mt-6">{action}</div>}
-    </div>
+    </motion.div>
   );
 }

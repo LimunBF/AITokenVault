@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/Toaster';
@@ -14,7 +14,7 @@ import { authFetch } from '@/lib/api';
 import { useGuard } from '@/hooks/use-guard';
 
 export default function DashboardPage() {
-  const { user, profile, loading: authLoading, ready } = useGuard();
+  const { user, profile, ready } = useGuard();
   const [providers, setProviders] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +25,7 @@ export default function DashboardPage() {
   const toast = useToast();
 
   useEffect(() => {
-    if (!user || profile?.status !== 'active') return;
+    if (!ready || !user) return;
 
     async function fetchData() {
       setLoading(true);
@@ -43,9 +43,10 @@ export default function DashboardPage() {
       setLoading(false);
     }
     fetchData();
-  }, [user, profile, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, user]);
 
-  // Filter providers by search
+  // Filter providers by search + kategori
   useEffect(() => {
     let result = providers;
     if (search) {
@@ -77,13 +78,16 @@ export default function DashboardPage() {
     setShowDeleteModal(false);
   }
 
-  if (authLoading || !ready) {
+  if (!ready) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="skeleton mb-6 h-10 w-56 rounded-xl" />
         <SkeletonList count={3} />
       </div>
     );
   }
+
+  const totalTokens = null; // ponytail: jumlah token belum dihitung — nanti kalau perlu statistik di dashboard.
 
   return (
     <motion.div
@@ -91,32 +95,47 @@ export default function DashboardPage() {
       animate={{ opacity: 1, y: 0 }}
       className="mx-auto max-w-6xl px-4 py-8"
     >
-      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      {/* Header */}
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">{t.dashboardTitle}</h1>
+          <h1 className="text-3xl font-bold">
+            Hi{profile?.email ? ', ' : ''}
+            <span className="text-gradient">{profile?.email || t.dashboardTitle}</span>
+          </h1>
           <p className="mt-1 text-sm text-zinc-400">{t.dashboardSubtitle}</p>
         </div>
-        <Link
-          href="/dashboard/providers/new"
-          className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 transition-colors"
-        >
-          {t.addProvider}
-        </Link>
+        <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
+          <Link
+            href="/dashboard/providers/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/30 transition-shadow hover:shadow-violet-500/45"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            {t.addProvider}
+          </Link>
+        </motion.div>
       </div>
 
       {/* Search & Filter */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row">
-        <input
-          type="text"
-          placeholder={t.searchPlaceholder}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-white placeholder-zinc-500 focus:!outline-none focus:ring-2 focus:ring-violet-500"
-        />
+        <div className="relative w-full sm:max-w-md">
+          <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4-4" strokeLinecap="round" />
+          </svg>
+          <input
+            type="text"
+            placeholder={t.searchPlaceholder}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-violet-500/20 bg-zinc-900/70 py-2 pl-9 pr-4 text-sm text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+          />
+        </div>
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="w-full sm:w-auto rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:!outline-none focus:ring-2 focus:ring-violet-500"
+          className="w-full rounded-xl border border-violet-500/20 bg-zinc-900/70 px-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 sm:w-auto"
         >
           {categories.map((cat) => (
             <option key={cat} value={cat}>
@@ -130,19 +149,22 @@ export default function DashboardPage() {
       {loading ? (
         <SkeletonList count={3} />
       ) : filtered.length === 0 ? (
-        <EmptyState
-          title={providers.length === 0 ? t.emptyProviders : 'Tidak ada hasil'}
-          description={
-            providers.length === 0 ? t.emptyProvidersDesc : 'Coba ubah filter pencarian lo.'
-          }
-          action={
-            providers.length === 0 && (
-              <Link href="/dashboard/providers/new" className="rounded-lg bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-500 transition-colors">
-                {t.addProvider}
-              </Link>
-            )
-          }
-        />
+        <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
+          <EmptyState
+            title={providers.length === 0 ? t.emptyProviders : 'Tidak ada hasil'}
+            description={providers.length === 0 ? t.emptyProvidersDesc : 'Coba ubah filter pencarian lo.'}
+            action={
+              providers.length === 0 && (
+                <Link
+                  href="/dashboard/providers/new"
+                  className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110"
+                >
+                  {t.addProvider}
+                </Link>
+              )
+            }
+          />
+        </motion.div>
       ) : (
         <motion.div
           className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
@@ -151,7 +173,10 @@ export default function DashboardPage() {
           variants={{ show: { transition: { staggerChildren: 0.07 } } }}
         >
           {filtered.map((provider) => (
-            <motion.div key={provider.id} variants={{ show: { opacity: 1, y: 0 }, hide: { opacity: 0, y: 12 } }}>
+            <motion.div
+              key={provider.id}
+              variants={{ show: { opacity: 1, y: 0 }, hide: { opacity: 0, y: 14 } }}
+            >
               <ProviderCard
                 provider={provider}
                 onDelete={() => {
