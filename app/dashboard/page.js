@@ -14,7 +14,7 @@ import { authFetch } from '@/lib/api';
 import { useGuard } from '@/hooks/use-guard';
 
 export default function DashboardPage() {
-  const { user, profile, loading: authLoading } = useGuard();
+  const { user, profile, loading: authLoading, ready } = useGuard();
   const [providers, setProviders] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +77,13 @@ export default function DashboardPage() {
     setShowDeleteModal(false);
   }
 
-  if (authLoading || !user) return null;
+  if (authLoading || !ready) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <SkeletonList count={3} />
+      </div>
+    );
+  }
 
   return (
     <motion.div

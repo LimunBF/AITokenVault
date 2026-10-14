@@ -10,7 +10,7 @@ import { t } from '@/lib/strings';
 import { authFetch } from '@/lib/api';
 
 export default function AdminUsersPage() {
-  const { user, profile, loading: authLoading } = useGuard({ requireAdmin: true });
+  const { user, profile, loading: authLoading, ready } = useGuard({ requireAdmin: true });
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -56,7 +56,7 @@ export default function AdminUsersPage() {
     setDeletingUser(null);
   }
 
-  if (authLoading || !user || profile?.role !== 'admin') return null;
+  if (authLoading || !ready) return <div className="mx-auto max-w-6xl px-4 py-8"><p className="text-zinc-400">{t.loading}</p></div>;
 
   return (
     <motion.div

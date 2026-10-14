@@ -35,10 +35,16 @@ export default function LoginPage() {
       .from('profiles')
       .select('status, role, deleted_at')
       .eq('id', data.user.id)
-      .single();
+      .maybeSingle();
 
-    if (profileError || !profile) {
-      setError(t.rejectedMessage);
+    if (profileError) {
+      setError(`Gagal baca profile: ${profileError.message}`);
+      setLoading(false);
+      return;
+    }
+
+    if (!profile) {
+      setError('Row profile gak ketemu di tabel profiles. Jalanin ulang query INSERT di SQL Editor.');
       setLoading(false);
       return;
     }

@@ -1,10 +1,23 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { t } from '@/lib/strings';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function Landing() {
+  const router = useRouter();
+  const { user, profile, loading } = useAuth();
+
+  // User yang udah login & active langsung ke dashboard, gak nyangkut di welcome page.
+  useEffect(() => {
+    if (!loading && user && profile?.status === 'active' && !profile.deleted_at) {
+      router.replace('/dashboard');
+    }
+  }, [loading, user, profile, router]);
+
   return (
     <motion.main
       initial={{ opacity: 0, y: 16 }}
