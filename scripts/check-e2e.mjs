@@ -65,8 +65,10 @@ ok('password salah -> 401', r.status === 401);
 
 console.log('\n--- approve via SQL, lalu login lagi ---');
 const { execSync } = await import('node:child_process');
+const DB = process.env.DB_NAME || 'limunweb_cpuser_aitokenvault';
+const MYSQL = '"D:/xampp/mysql/bin/mysql.exe" -u root';
 execSync(
-  `"D:/xampp/mysql/bin/mysql.exe" -u root atv_test -e "UPDATE atv_users SET status='active', role='admin', approved_at=NOW() WHERE email='${email}'"`,
+  `${MYSQL} ${DB} -e "UPDATE atv_users SET status='active', role='admin', approved_at=NOW() WHERE email='${email}'"`,
   { stdio: 'pipe' }
 );
 
@@ -104,7 +106,7 @@ const tokenId = r.body?.id;
 
 // 11. DB simpan ciphertext
 const dbRow = execSync(
-  `"D:/xampp/mysql/bin/mysql.exe" -u root atv_test -N -e "SELECT token_encrypted, token_iv FROM atv_tokens WHERE id='${tokenId}'"`,
+  `${MYSQL} ${DB} -N -e "SELECT token_encrypted, token_iv FROM atv_tokens WHERE id='${tokenId}'"`,
   { encoding: 'utf8' }
 ).trim().split('\t');
 ok('DB simpan ciphertext (bukan plaintext)', !dbRow[0].includes(SECRET) && dbRow[0].length > 40);
@@ -127,7 +129,7 @@ cookie = '';
 const email2 = `e2e2${Date.now()}@example.com`;
 await call('/api/auth/register', { method: 'POST', body: JSON.stringify({ email: email2, password }) });
 execSync(
-  `"D:/xampp/mysql/bin/mysql.exe" -u root atv_test -e "UPDATE atv_users SET status='active' WHERE email='${email2}'"`,
+  `${MYSQL} ${DB} -e "UPDATE atv_users SET status='active' WHERE email='${email2}'"`,
   { stdio: 'pipe' }
 );
 await call('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: email2, password }) });
