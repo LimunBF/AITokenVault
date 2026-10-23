@@ -66,7 +66,7 @@ ok('password salah -> 401', r.status === 401);
 console.log('\n--- approve via SQL, lalu login lagi ---');
 const { execSync } = await import('node:child_process');
 const DB = process.env.DB_NAME || 'limunweb_cpuser_aitokenvault';
-const MYSQL = '"D:/xampp/mysql/bin/mysql.exe" -u root';
+const MYSQL = '"D:/laragon/laragon/bin/mysql/mysql-8.4.3-winx64/bin/mysql.exe" -u root';
 execSync(
   `${MYSQL} ${DB} -e "UPDATE atv_users SET status='active', role='admin', approved_at=NOW() WHERE email='${email}'"`,
   { stdio: 'pipe' }
