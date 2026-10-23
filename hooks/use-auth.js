@@ -1,63 +1,50 @@
 'use client';
 
+// hooks/use-auth.js — sumber tunggal status login dari /api/auth/me.
+// Gak ada Supabase: session ada di cookie HttpOnly, client cuma tau "siapa gue".
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { withTimeout } from '@/lib/async-utils';
+import { apiFetch } from '@/lib/api-client';
 
-const AuthCtx = createContext({ user: null, profile: null, loading: true });
-
-async function fetchProfile(userId) {
-  // maybeSingle: 0 row = null, bukan error (RLS bisa sembunyikan row).
-  // Timeout 8 detik: kalau Supabase gak jawab, jangan gantung selamanya.
-  try {
-    const { data, error } = await withTimeout(
-      supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      8000
-    );
-    if (error) return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
+const AuthCtx = createContext({
+  user: null,
+  profile: null,
+  loading: true,
+  refresh: async () => {},
+  logout: async () => {},
+});
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let active = true;
-    let seq = 0;
-
-    // user & profile di-set BARENG setelah profile kebaca.
-    // Kalau user di-set duluan, use-guard lihat profile null -> logout paksa (race).
-    async function sync(session) {
-      const mySeq = ++seq;
-      const u = session?.user || null;
-      const p = u ? await fetchProfile(u.id) : null;
-      if (!active || mySeq !== seq) return;
-      setUser(u);
-      setProfile(p);
+  const refresh = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/auth/me', { cache: 'no-store' });
+      const body = await res.json();
+      setUser(body.user || null);
+    } catch {
+      setUser(null);
+    } finally {
       setLoading(false);
     }
-
-    supabase.auth.getSession().then(({ data }) => sync(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => sync(session));
-
-    return () => {
-      active = false;
-      sub.subscription.unsubscribe();
-    };
   }, []);
 
-  const refreshProfile = useCallback(async () => {
-    if (!user) return;
-    setProfile(await fetchProfile(user.id));
-  }, [user]);
+  const logout = useCallback(async () => {
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // cookie bakal expire sendiri
+    }
+    setUser(null);
+  }, []);
 
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // profile = alias user: nama field lama biar halaman gak perlu diubah semua.
   return (
-    <AuthCtx.Provider value={{ user, profile, loading, refreshProfile }}>
+    <AuthCtx.Provider value={{ user, profile: user, loading, refresh, logout }}>
       {children}
     </AuthCtx.Provider>
   );

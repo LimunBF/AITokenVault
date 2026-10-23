@@ -7,7 +7,7 @@ import { useToast } from '@/components/Toaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { EmptyState } from '@/components/EmptyState';
 import { t } from '@/lib/strings';
-import { authFetch, SUPABASE_URL } from '@/lib/api';
+import { apiFetch } from '@/lib/api-client';
 import { PendingStatus } from '@/components/PendingStatus';
 
 const STATUS_STYLE = {
@@ -36,7 +36,7 @@ export default function AdminUsersPage() {
     setLoading(true);
     setLoadError('');
     try {
-      const res = await authFetch('/api/admin/users');
+      const res = await apiFetch('/api/admin/users');
       if (res.ok) {
         setUsers(await res.json());
       } else {
@@ -58,7 +58,7 @@ export default function AdminUsersPage() {
   async function handleUserAction(userId, action) {
     setBusyId(userId);
     try {
-      const res = await authFetch('/api/admin/users', {
+      const res = await apiFetch('/api/admin/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, action }),
@@ -96,7 +96,7 @@ export default function AdminUsersPage() {
       <div className="mx-auto max-w-6xl px-4 py-8">
         <div className="skeleton mb-6 h-10 w-56 rounded-xl" />
         <div className="skeleton h-64 w-full rounded-2xl" />
-        <PendingStatus active serverUrl={SUPABASE_URL} />
+        <PendingStatus active />
       </div>
     );
   }

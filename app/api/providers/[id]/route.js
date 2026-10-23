@@ -1,91 +1,101 @@
 // app/api/providers/[id]/route.js
-// GET: detail provider + tokens
+// GET: detail provider + token list
 // PUT: update provider
-// DELETE: delete provider (cascade delete tokens via DB)
+// DELETE: hapus provider (token ikut kehapus via ON DELETE CASCADE)
+import { query, queryOne, run } from '@/lib/db';
+import { getSessionUser, unauthorized } from '@/lib/auth';
 
-import { getUserClient } from '@/lib/server-auth';
+function shape(row) {
+  let tags = [];
+  if (row.tags) {
+    try { tags = JSON.parse(row.tags); } catch { tags = []; }
+  }
+  return { ...row, tags };
+}
 
 export async function GET(request, { params }) {
   try {
-    const { supabase, user } = await getUserClient(request);
-    if (!supabase || !user) return unauthorized();
+    const user = await getSessionUser();
+    if (!user) return unauthorized();
 
-    const { id } = params;
+    const provider = await queryOne(
+      'SELECT * FROM atv_providers WHERE id = ? AND user_id = ? LIMIT 1',
+      [params.id, user.id]
+    );
+    if (!provider) return Response.json({ error: 'Not found' }, { status: 404 });
 
-    const { data: provider, error: providerErr } = await supabase
-      .from('providers')
-      .select('*, tokens(*)')
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .single();
+    const tokens = await query(
+      `SELECT id, provider_id, label, status, notes, created_at, updated_at
+         FROM atv_tokens
+        WHERE provider_id = ? AND deleted_at IS NULL
+        ORDER BY created_at DESC`,
+      [params.id]
+    );
 
-    if (providerErr) {
-      if (providerErr.code === 'PGRST116') {
-        return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
-      }
-      throw providerErr;
-    }
-
-    return new Response(JSON.stringify(provider), { status: 200 });
+    return Response.json({ ...shape(provider), tokens });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
 
+const FIELDS = {
+  name: 'name',
+  url: 'url',
+  category: 'category',
+  model: 'model',
+  notes: 'notes',
+};
+
 export async function PUT(request, { params }) {
   try {
-    const { supabase, user } = await getUserClient(request);
-    if (!supabase || !user) return unauthorized();
+    const user = await getSessionUser();
+    if (!user) return unauthorized();
 
-    const { id } = params;
     const body = await request.json();
-    const { name, url, category, model, tags, notes } = body;
+    const sets = [];
+    const values = [];
 
-    const updates = { updated_at: new Date().toISOString() };
-    if (name !== undefined) updates.name = name;
-    if (url !== undefined) updates.url = url;
-    if (category !== undefined) updates.category = category;
-    if (model !== undefined) updates.model = model;
-    if (tags !== undefined) updates.tags = tags;
-    if (notes !== undefined) updates.notes = notes;
+    for (const [key, col] of Object.entries(FIELDS)) {
+      if (body[key] !== undefined) {
+        sets.push(`${col} = ?`);
+        values.push(body[key]);
+      }
+    }
+    if (body.tags !== undefined) {
+      sets.push('tags = ?');
+      values.push(JSON.stringify(Array.isArray(body.tags) ? body.tags : []));
+    }
+    if (!sets.length) {
+      return Response.json({ error: 'Gak ada field yang diubah.' }, { status: 400 });
+    }
 
-    const { data, error } = await supabase
-      .from('providers')
-      .update(updates)
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .select()
-      .single();
+    values.push(params.id, user.id);
+    const result = await run(
+      `UPDATE atv_providers SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`,
+      values
+    );
+    if (!result.affectedRows) return Response.json({ error: 'Not found' }, { status: 404 });
 
-    if (error) throw error;
-
-    return new Response(JSON.stringify(data), { status: 200 });
+    const row = await queryOne('SELECT * FROM atv_providers WHERE id = ?', [params.id]);
+    return Response.json(shape(row));
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
 
 export async function DELETE(request, { params }) {
   try {
-    const { supabase, user } = await getUserClient(request);
-    if (!supabase || !user) return unauthorized();
+    const user = await getSessionUser();
+    if (!user) return unauthorized();
 
-    const { id } = params;
+    const result = await run(
+      'DELETE FROM atv_providers WHERE id = ? AND user_id = ?',
+      [params.id, user.id]
+    );
+    if (!result.affectedRows) return Response.json({ error: 'Not found' }, { status: 404 });
 
-    const { error } = await supabase
-      .from('providers')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
-
-    if (error) throw error;
-
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    return Response.json({ success: true });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
-}
-
-function unauthorized() {
-  return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 }

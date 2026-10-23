@@ -1,62 +1,63 @@
 // app/api/providers/route.js
-// GET: list providers for logged-in user
-// POST: create a new provider
+// GET: list providers milik user yang login
+// POST: tambah provider baru
+import crypto from 'node:crypto';
+import { query, queryOne, run } from '@/lib/db';
+import { getSessionUser, unauthorized } from '@/lib/auth';
 
-import { getUserClient } from '@/lib/server-auth';
-
-function unauthorized() {
-  return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+function shape(row) {
+  // tags disimpan TEXT JSON; balikin sebagai array biar UI gak berubah.
+  let tags = [];
+  if (row.tags) {
+    try { tags = JSON.parse(row.tags); } catch { tags = []; }
+  }
+  return { ...row, tags };
 }
 
-export async function GET(request) {
+export async function GET() {
   try {
-    const { supabase, user } = await getUserClient(request);
-    if (!supabase || !user) return unauthorized();
+    const user = await getSessionUser();
+    if (!user) return unauthorized();
 
-    const { data, error } = await supabase
-      .from('providers')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    return new Response(JSON.stringify(data), { status: 200 });
+    const rows = await query(
+      'SELECT * FROM atv_providers WHERE user_id = ? ORDER BY created_at DESC',
+      [user.id]
+    );
+    return Response.json(rows.map(shape));
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
 
 export async function POST(request) {
   try {
-    const { supabase, user } = await getUserClient(request);
-    if (!supabase || !user) return unauthorized();
+    const user = await getSessionUser();
+    if (!user) return unauthorized();
 
-    const body = await request.json();
-    const { name, url, category, model, tags = [], notes } = body;
-
+    const { name, url, category, model, tags = [], notes } = await request.json();
     if (!name || !url) {
-      return new Response(JSON.stringify({ error: 'Name and URL are required' }), { status: 400 });
+      return Response.json({ error: 'Nama dan URL wajib diisi.' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-      .from('providers')
-      .insert({
-        user_id: user.id,
+    const id = crypto.randomUUID();
+    await run(
+      `INSERT INTO atv_providers (id, user_id, name, url, category, model, tags, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        user.id,
         name,
         url,
-        category: category || null,
-        model: model || null,
-        tags,
-        notes: notes || null,
-      })
-      .select()
-      .single();
+        category || null,
+        model || null,
+        JSON.stringify(Array.isArray(tags) ? tags : []),
+        notes || null,
+      ]
+    );
 
-    if (error) throw error;
-
-    return new Response(JSON.stringify(data), { status: 201 });
+    const row = await queryOne('SELECT * FROM atv_providers WHERE id = ?', [id]);
+    return Response.json(shape(row), { status: 201 });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }

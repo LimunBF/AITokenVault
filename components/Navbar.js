@@ -4,17 +4,17 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/use-auth';
-import { supabase } from '@/lib/supabase';
 import { t } from '@/lib/strings';
 
 export function Navbar() {
-  const { user, profile } = useAuth();
+  const { user, profile, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    await logout();
     router.push('/');
+    router.refresh();
   }
 
   const isAdmin = user && profile?.role === 'admin';

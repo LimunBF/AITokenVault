@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { useGuard } from '@/hooks/use-guard';
 import { useToast } from '@/components/Toaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -13,10 +12,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { SkeletonList } from '@/components/Skeleton';
 import { PendingStatus } from '@/components/PendingStatus';
 import { t } from '@/lib/strings';
-import { authFetch, SUPABASE_URL } from '@/lib/api';
-import { withTimeout, isTimeoutError } from '@/lib/async-utils';
-
-const DB_TIMEOUT_MS = 15000;
+import { apiFetch } from '@/lib/api-client';
 
 const inputCls =
   'mt-1 w-full rounded-xl border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60 disabled:opacity-60';
@@ -49,37 +45,27 @@ export default function ProviderDetailPage() {
       setLoading(true);
       setLoadError('');
       try {
-        const { data, error } = await withTimeout(
-          supabase
-            .from('providers')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', user.id)
-            .single(),
-          DB_TIMEOUT_MS
-        );
-
-        if (error) {
+        const res = await apiFetch(`/api/providers/${id}`, { cache: 'no-store' });
+        if (res.status === 404) {
           router.replace('/dashboard');
           return;
         }
+        const body = await res.json().catch(() => null);
+        if (!res.ok) {
+          setLoadError((body && body.error) || t.offline);
+          return;
+        }
 
-        setProvider(data);
-
-        const { data: tokenData, error: tokenError } = await withTimeout(
-          supabase
-            .from('tokens')
-            .select('*')
-            .eq('provider_id', id)
-            .is('deleted_at', null)
-            .order('created_at', { ascending:false }),
-          DB_TIMEOUT_MS
-        );
-
-        if (!tokenError) setTokens(tokenData || []);
+        const { tokens: tokenList, ...providerData } = body || {};
+        setProvider(providerData);
+        setTokens(Array.isArray(tokenList) ? tokenList : []);
       } catch (err) {
         // Jangan diem-diem redirect — kasih tau user kenapa halaman kosong.
-        setLoadError(isTimeoutError(err) ? t.serverTimeout : `${t.requestFailed} (${err.message})`);
+        setLoadError(
+          err?.name === 'TimeoutError' || err?.name === 'AbortError'
+            ? t.serverTimeout
+            : `${t.requestFailed} (${err.message})`
+        );
       } finally {
         setLoading(false);
       }
@@ -94,7 +80,7 @@ export default function ProviderDetailPage() {
     setSavingToken(true);
     setTokenError('');
     try {
-      const res = await authFetch('/api/tokens', {
+      const res = await apiFetch('/api/tokens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -131,7 +117,7 @@ export default function ProviderDetailPage() {
   }
 
   async function handleStatusChange(token, status) {
-    const res = await authFetch(`/api/tokens/${token.id}`, {
+    const res = await apiFetch(`/api/tokens/${token.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -146,7 +132,7 @@ export default function ProviderDetailPage() {
 
   async function handleDeleteProvider() {
     if (!provider || !user) return;
-    const res = await authFetch(`/api/providers/${provider.id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/providers/${provider.id}`, { method: 'DELETE' });
     if (res.ok) {
       toast.show('Provider berhasil dihapus.', 'success');
       router.replace('/dashboard');
@@ -158,7 +144,7 @@ export default function ProviderDetailPage() {
 
   async function handleDeleteToken() {
     if (!deleteToken) return;
-    const res = await authFetch(`/api/tokens/${deleteToken.id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/tokens/${deleteToken.id}`, { method: 'DELETE' });
     if (res.ok) {
       setTokens((prev) => prev.filter((tk) => tk.id !== deleteToken.id));
       toast.show('Token berhasil dihapus.', 'success');
@@ -471,7 +457,7 @@ export default function ProviderDetailPage() {
                 </button>
               </div>
 
-              <PendingStatus active={savingToken} serverUrl={SUPABASE_URL} />
+              <PendingStatus active={savingToken} />
             </motion.form>
           </motion.div>
         )}

@@ -4,14 +4,11 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
 import { t } from '@/lib/strings';
-import { authFetch, SUPABASE_URL } from '@/lib/api';
+import { apiFetch } from '@/lib/api-client';
 import { PendingStatus } from '@/components/PendingStatus';
-import { withTimeout, isTimeoutError } from '@/lib/async-utils';
 
 const CATEGORIES = ['Chatbot', 'Image', 'Video', 'Audio', 'Coding', 'Lainnya'];
-const DB_TIMEOUT_MS = 15000;
 
 const inputCls =
   'mt-1 w-full rounded-xl border border-violet-500/25 bg-zinc-900/70 px-3 py-2 text-white placeholder-zinc-500 transition-colors focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/60 disabled:opacity-60';
@@ -41,42 +38,31 @@ export default function NewProviderPage() {
     setLoading(true);
 
     try {
-      const { data: { session } } = await withTimeout(supabase.auth.getSession(), DB_TIMEOUT_MS);
-      if (!session) {
-        router.push('/login');
-        return;
-      }
-
       const tagArray = tags.split(',').map((s) => s.trim()).filter(Boolean);
 
-      const { data: created, error: dbError } = await withTimeout(
-        supabase
-          .from('providers')
-          .insert({
-            user_id: session.user.id,
-            name,
-            url,
-            category: category || null,
-            model: model || null,
-            tags: tagArray,
-            notes: notes || null,
-          })
-          .select()
-          .single(),
-        DB_TIMEOUT_MS
-      );
+      const res = await apiFetch('/api/providers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          url,
+          category: category || null,
+          model: model || null,
+          tags: tagArray,
+          notes: notes || null,
+        }),
+      });
+      const created = await res.json().catch(() => null);
 
-      if (dbError) {
-        setError(dbError.message || 'Gagal menambah provider');
+      if (!res.ok || !created) {
+        setError((created && created.error) || 'Gagal menambah provider.');
         setLoading(false);
         return;
       }
 
       // Provider kebuat. Kalau token diisi, simpan sekalian.
       if (apiToken.trim()) {
-        const res = await authFetch('/api/tokens', {
+        const tokenRes = await apiFetch('/api/tokens', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             provider_id: created.id,
             label: tokenLabel.trim() || 'Token Utama',
@@ -85,10 +71,10 @@ export default function NewProviderPage() {
           }),
         });
 
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
+        if (!tokenRes.ok) {
+          const body = await tokenRes.json().catch(() => null);
           // Provider tetap kebuat — jangan buang kerjaan user cuma karena token gagal.
-          setWarning(`Provider kebuat, tapi token gagal disimpan: ${body.error || res.status}. Tambahin manual di halaman provider.`);
+          setWarning(`Provider kebuat, tapi token gagal disimpan: ${(body && body.error) || tokenRes.status}. Tambahin manual di halaman provider.`);
           setLoading(false);
           router.push(`/dashboard/providers/${created.id}`);
           return;
@@ -98,7 +84,7 @@ export default function NewProviderPage() {
       // Ke halaman provider, bukan dashboard — biar user lihat hasilnya langsung.
       router.push(`/dashboard/providers/${created.id}`);
     } catch (err) {
-      if (isTimeoutError(err)) {
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
         setError(t.serverTimeout);
         setTimedOut(true);
       } else {
@@ -312,7 +298,7 @@ export default function NewProviderPage() {
           </motion.button>
         </div>
 
-        <PendingStatus active={loading} serverUrl={SUPABASE_URL} />
+        <PendingStatus active={loading} />
 
         {timedOut && (
           <button

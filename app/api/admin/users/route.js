@@ -1,79 +1,70 @@
 // app/api/admin/users/route.js
-// GET: list semua user (admin only)
-// PATCH: approve / reject / soft-delete user (admin only)
+// GET: list semua user (admin)
+// PATCH: approve / reject / soft-delete (admin)
+import { query, queryOne, run } from '@/lib/db';
+import { getSessionUser, unauthorized } from '@/lib/auth';
 
-import { getUserClient } from '@/lib/server-auth';
-import { createAdmin } from '@/lib/supabase-admin';
-
-async function requireAdmin(request) {
-  const ctx = await getUserClient(request);
-  if (!ctx?.user) return null;
-
-  // Cek role pakai service role: RLS di profiles tidak izinkan baca baris orang lain.
-  const admin = createAdmin();
-  const { data: me } = await admin
-    .from('profiles')
-    .select('role, status, deleted_at')
-    .eq('id', ctx.user.id)
-    .single();
-
-  if (!me || me.role !== 'admin' || me.status !== 'active' || me.deleted_at) return null;
-  return { admin, user: ctx.user };
+async function requireAdmin() {
+  const user = await getSessionUser();
+  if (!user || user.role !== 'admin' || user.status !== 'active') return null;
+  return user;
 }
 
-function unauthorized() {
-  return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-}
-
-export async function GET(request) {
+export async function GET() {
   try {
-    const ctx = await requireAdmin(request);
-    if (!ctx) return unauthorized();
+    const admin = await requireAdmin();
+    if (!admin) return unauthorized();
 
-    const { data, error } = await ctx.admin
-      .from('profiles')
-      .select('id, email, role, status, created_at, approved_at, deleted_at')
-      .is('deleted_at', null)
-      .order('created_at', { ascending:false });
-
-    if (error) throw error;
-    return new Response(JSON.stringify(data), { status: 200 });
+    const rows = await query(
+      `SELECT id, email, role, status, created_at, approved_at
+         FROM atv_users
+        WHERE deleted_at IS NULL
+        ORDER BY created_at DESC`
+    );
+    return Response.json(rows);
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
 
 export async function PATCH(request) {
   try {
-    const ctx = await requireAdmin(request);
-    if (!ctx) return unauthorized();
+    const admin = await requireAdmin();
+    if (!admin) return unauthorized();
 
     const { user_id, action } = await request.json();
-    if (!user_id) return new Response(JSON.stringify({ error: 'user_id wajib' }), { status: 400 });
+    if (!user_id) return Response.json({ error: 'user_id wajib' }, { status: 400 });
 
-    // Admin tidak boleh ngehapus/reject dirinya sendiri.
-    if (user_id === ctx.user.id && action !== 'approve') {
-      return new Response(JSON.stringify({ error: 'Gak bisa ubah akun sendiri' }), { status: 400 });
+    // Admin gak boleh ngehapus/reject dirinya sendiri.
+    if (user_id === admin.id && action !== 'approve') {
+      return Response.json({ error: 'Gak bisa ubah akun sendiri' }, { status: 400 });
     }
 
-    const updates =
-      action === 'approve' ? { status: 'active', approved_at: new Date().toISOString() }
-      : action === 'reject' ? { status: 'rejected' }
-      : action === 'delete' ? { deleted_at: new Date().toISOString() }
-      : null;
+    let sql;
+    if (action === 'approve') {
+      sql = "UPDATE atv_users SET status='active', approved_at=UTC_TIMESTAMP() WHERE id=?";
+    } else if (action === 'reject') {
+      sql = "UPDATE atv_users SET status='rejected' WHERE id=?";
+    } else if (action === 'delete') {
+      sql = 'UPDATE atv_users SET deleted_at=UTC_TIMESTAMP() WHERE id=?';
+    } else {
+      return Response.json({ error: 'action tidak valid' }, { status: 400 });
+    }
 
-    if (!updates) return new Response(JSON.stringify({ error: 'action tidak valid' }), { status: 400 });
+    const result = await run(sql, [user_id]);
+    if (!result.affectedRows) return Response.json({ error: 'Not found' }, { status: 404 });
 
-    const { data, error } = await ctx.admin
-      .from('profiles')
-      .update(updates)
-      .eq('id', user_id)
-      .select()
-      .single();
+    if (action === 'delete' || action === 'reject') {
+      // Session lama langsung dicabut — user gak bisa lanjut pakai cookie lamanya.
+      await run('DELETE FROM atv_sessions WHERE user_id = ?', [user_id]);
+    }
 
-    if (error) throw error;
-    return new Response(JSON.stringify(data), { status: 200 });
+    const row = await queryOne(
+      'SELECT id, email, role, status, created_at, approved_at FROM atv_users WHERE id = ?',
+      [user_id]
+    );
+    return Response.json(row);
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }

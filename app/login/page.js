@@ -4,17 +4,15 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
 import { t } from '@/lib/strings';
 import { PasswordInput } from '@/components/PasswordInput';
 import { PendingStatus } from '@/components/PendingStatus';
-import { SUPABASE_URL } from '@/lib/api';
-import { withTimeout, isTimeoutError } from '@/lib/async-utils';
-
-const AUTH_TIMEOUT_MS = 15000;
+import { apiFetch } from '@/lib/api-client';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -28,61 +26,26 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Batas waktu: kalau Supabase gak jawab dalam 15 detik, jangan nunggu selamanya.
-      const { data, error: authError } = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password }),
-        AUTH_TIMEOUT_MS
-      );
+      // apiFetch punya AbortSignal.timeout(20s) — gak bakal nge-gantung.
+      const res = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      const body = await res.json().catch(() => ({}));
 
-      if (authError) {
-        const msg = (authError.message || '').toLowerCase();
-        if (msg.includes('not confirmed')) setError(t.emailNotConfirmed);
-        else if (msg.includes('rate limit') || authError.status === 429) setError(t.rateLimited);
-        else setError(t.loginFailed);
+      if (!res.ok) {
+        setError(body.error || t.loginFailed);
+        if (body.code === 'pending') setTimedOut(false);
         setLoading(false);
         return;
       }
 
-      const { data: profile, error: profileError } = await withTimeout(
-        supabase
-          .from('profiles')
-          .select('status, role, deleted_at')
-          .eq('id', data.user.id)
-          .maybeSingle(),
-        AUTH_TIMEOUT_MS
-      );
-
-      if (profileError) {
-        setError(`Gagal baca profile: ${profileError.message}`);
-        setLoading(false);
-        return;
-      }
-
-      if (!profile) {
-        setError('Row profile gak ketemu di tabel profiles. Jalanin ulang query INSERT di SQL Editor.');
-        setLoading(false);
-        return;
-      }
-
-      if (profile.deleted_at || profile.status === 'rejected') {
-        await supabase.auth.signOut();
-        setError(t.rejectedMessage);
-        setLoading(false);
-        return;
-      }
-
-      if (profile.status === 'pending') {
-        await supabase.auth.signOut();
-        setError(t.pendingMessage);
-        setLoading(false);
-        return;
-      }
-
-      // status === 'active' -> gas masuk. loading sengaja dibiarkan nyala
-      // sampai navigasi selesai, biar gak kedip balik ke bentuk awal.
+      // Session udah ada di cookie HttpOnly. Sinkronkan state client, baru pindah.
+      await refresh();
       router.push('/dashboard');
+      router.refresh();
     } catch (err) {
-      if (isTimeoutError(err)) {
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
         setError(t.serverTimeout);
         setTimedOut(true);
       } else {
@@ -174,7 +137,7 @@ export default function LoginPage() {
           </motion.button>
 
           {/* Detik berjalan + status koneksi, biar gak terkesan nge-freeze */}
-          <PendingStatus active={loading} serverUrl={SUPABASE_URL} />
+          <PendingStatus active={loading} />
 
           {timedOut && (
             <button

@@ -5,7 +5,7 @@ import { t } from '@/lib/strings';
 
 // Feedback hidup pas request lama: detik berjalan + ping kesehatan server
 // tiap 4 detik, jadi user tahu masalahnya di koneksi atau di server.
-export function PendingStatus({ active, serverUrl }) {
+export function PendingStatus({ active, serverUrl = '/api/health' }) {
   const [elapsed, setElapsed] = useState(0);
   const [net, setNet] = useState('unknown'); // unknown | ok | down
 
@@ -23,7 +23,7 @@ export function PendingStatus({ active, serverUrl }) {
       try {
         const ctl = new AbortController();
         const to = setTimeout(() => ctl.abort(), 3500);
-        const r = await fetch(`${serverUrl}/auth/v1/health`, { signal: ctl.signal });
+        const r = await fetch(serverUrl, { signal: ctl.signal, cache: 'no-store' });
         clearTimeout(to);
         if (alive) setNet(r.ok ? 'ok' : 'down');
       } catch {

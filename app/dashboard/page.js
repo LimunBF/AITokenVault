@@ -3,16 +3,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { t } from '@/lib/strings';
+import { apiFetch } from '@/lib/api-client';
+
+import { PendingStatus } from '@/components/PendingStatus';
 import { useToast } from '@/components/Toaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { ProviderCard } from '@/components/ProviderCard';
 import { SkeletonList } from '@/components/Skeleton';
 import { EmptyState } from '@/components/EmptyState';
-import { t } from '@/lib/strings';
-import { authFetch, SUPABASE_URL } from '@/lib/api';
-import { withTimeout, isTimeoutError } from '@/lib/async-utils';
-import { PendingStatus } from '@/components/PendingStatus';
 import { useGuard } from '@/hooks/use-guard';
 
 export default function DashboardPage() {
@@ -34,22 +33,19 @@ export default function DashboardPage() {
       setLoading(true);
       setLoadError('');
       try {
-        const { data, error } = await withTimeout(
-          supabase
-            .from('providers')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false }),
-          15000
-        );
-
-        if (error) {
-          setLoadError(error.message || t.offline);
+        const res = await apiFetch('/api/providers', { cache: 'no-store' });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) {
+          setLoadError((body && body.error) || t.offline);
         } else {
-          setProviders(data || []);
+          setProviders(Array.isArray(body) ? body : []);
         }
       } catch (err) {
-        setLoadError(isTimeoutError(err) ? t.serverTimeout : `${t.requestFailed} (${err.message})`);
+        setLoadError(
+          err?.name === 'TimeoutError' || err?.name === 'AbortError'
+            ? t.serverTimeout
+            : `${t.requestFailed} (${err.message})`
+        );
       } finally {
         setLoading(false);
       }
@@ -79,7 +75,7 @@ export default function DashboardPage() {
 
   async function handleDelete() {
     if (!deletingProvider || !user) return;
-    const res = await authFetch(`/api/providers/${deletingProvider.id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/providers/${deletingProvider.id}`, { method: 'DELETE' });
     if (res.ok) {
       setProviders((prev) => prev.filter((p) => p.id !== deletingProvider.id));
       toast.show('Provider berhasil dihapus.', 'success');
@@ -171,7 +167,7 @@ export default function DashboardPage() {
       {loading ? (
         <>
           <SkeletonList count={3} />
-          <PendingStatus active serverUrl={SUPABASE_URL} />
+          <PendingStatus active />
         </>
       ) : filtered.length === 0 ? (
         <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>

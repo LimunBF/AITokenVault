@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { t } from '@/lib/strings';
-import { authFetch } from '@/lib/api';
+import { apiFetch } from '@/lib/api-client';
 
 const STATUS_STYLE = {
   active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
@@ -28,7 +28,7 @@ export function TokenReveal({ token }) {
     setLoading(true);
     setError('');
     try {
-      const res = await authFetch(`/api/tokens/${token.id}`);
+      const res = await apiFetch(`/api/tokens/${token.id}`, { cache: 'no-store' });
       if (!res.ok) {
         setError('Gagal ambil token. Coba login ulang.');
         return;

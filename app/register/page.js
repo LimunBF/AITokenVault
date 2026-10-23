@@ -3,14 +3,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
 import { t } from '@/lib/strings';
 import { PasswordInput } from '@/components/PasswordInput';
 import { PendingStatus } from '@/components/PendingStatus';
-import { SUPABASE_URL } from '@/lib/api';
-import { withTimeout, isTimeoutError } from '@/lib/async-utils';
-
-const AUTH_TIMEOUT_MS = 15000;
+import { apiFetch } from '@/lib/api-client';
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -21,39 +17,41 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
+  const mismatch = confirm.length > 0 && password !== confirm;
+  const canSubmit = email && password.length >= 6 && password === confirm && !loading;
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setTimedOut(false);
 
-    // Validasi di trust boundary: cek lokal dulu sebelum hit Supabase.
-    if (password.length < 6) {
-      setError(t.passwordTooShort);
-      return;
-    }
     if (password !== confirm) {
       setError(t.passwordMismatch);
+      return;
+    }
+    if (password.length < 6) {
+      setError(t.passwordTooShort);
       return;
     }
 
     setLoading(true);
     try {
-      const { error: signUpError } = await withTimeout(
-        supabase.auth.signUp({ email, password }),
-        AUTH_TIMEOUT_MS
-      );
-      setLoading(false);
+      const res = await apiFetch('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      const body = await res.json().catch(() => ({}));
 
-      if (signUpError) {
-        const msg = (signUpError.message || '').toLowerCase();
-        if (msg.includes('rate limit') || signUpError.status === 429) setError(t.rateLimited);
-        else setError(signUpError.message || t.registerFailed);
+      if (!res.ok) {
+        setError(body.error || t.registerFailed);
+        setLoading(false);
         return;
       }
 
       setSuccess(true);
+      setLoading(false);
     } catch (err) {
-      if (isTimeoutError(err)) {
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
         setError(t.serverTimeout);
         setTimedOut(true);
       } else {
@@ -66,31 +64,27 @@ export default function RegisterPage() {
   if (success) {
     return (
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
         className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-10"
       >
-        <div className="card-glass w-full max-w-md rounded-3xl border border-emerald-500/30 p-8 text-center shadow-2xl shadow-emerald-950/40">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 220, damping: 16, delay: 0.1 }}
-            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-cyan-500 shadow-lg shadow-emerald-600/40"
-          >
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0a0a16" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 13l4 4L19 7" />
-            </svg>
-          </motion.div>
-          <h1 className="text-xl font-bold text-white">Registrasi Berhasil</h1>
-          <p className="mt-2 text-sm text-zinc-300">{t.pendingMessage}</p>
-          <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
-            Penting: cek inbox email lo dan klik link konfirmasi. Kalau gak dikonfirmasi, login bakal ditolak walau admin udah approve.
+        <div className="card-glass w-full max-w-md rounded-3xl border border-emerald-500/25 p-8 text-center shadow-2xl shadow-emerald-950/30">
+          <div className="mb-4 flex justify-center">
+            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-cyan-500 shadow-lg shadow-emerald-600/30">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0a0a16" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            </span>
+          </div>
+          <h1 className="text-xl font-bold text-white">Akun Terdaftar</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            Akun lo masuk daftar tunggu. Admin perlu approve dulu sebelum lo bisa login.
           </p>
           <Link
             href="/login"
             className="mt-6 inline-block rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110"
           >
-            {t.login}
+            Ke Halaman Login
           </Link>
         </div>
       </motion.div>
@@ -109,21 +103,11 @@ export default function RegisterPage() {
         transition={{ type: 'spring', stiffness: 200, damping: 24 }}
         className="card-glass w-full max-w-md rounded-3xl border border-violet-500/20 p-8 shadow-2xl shadow-violet-950/50"
       >
-        <div className="mb-6 flex justify-center">
-          <span className="animate-float inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-violet-500 to-fuchsia-500 shadow-lg shadow-cyan-600/40">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0a0a16" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M19 8v6M22 11h-6" />
-            </svg>
-          </span>
-        </div>
-
         <h1 className="text-center text-2xl font-bold">
-          <span className="text-gradient">Buat Akun Baru</span>
+          <span className="text-gradient">Buat Akun</span>
         </h1>
         <p className="mt-1 text-center text-sm text-zinc-400">
-          Admin approve dulu sebelum lo bisa masuk.
+          Daftar dulu, admin approve, baru bisa masuk.
         </p>
 
         {error && (
@@ -164,10 +148,12 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 minLength={6}
                 autoComplete="new-password"
-                placeholder="Minimal 6 karakter"
                 disabled={loading}
               />
             </div>
+            {password.length > 0 && password.length < 6 && (
+              <p className="mt-1 text-xs text-amber-400">{t.passwordTooShort}</p>
+            )}
           </div>
 
           <div>
@@ -181,20 +167,19 @@ export default function RegisterPage() {
                 onChange={(e) => setConfirm(e.target.value)}
                 minLength={6}
                 autoComplete="new-password"
-                placeholder="Ulangi password"
                 disabled={loading}
               />
             </div>
-            {confirm.length > 0 && password !== confirm && (
-              <p className="mt-1.5 text-xs text-amber-400">Password belum sama.</p>
+            {mismatch && (
+              <p className="mt-1 text-xs text-red-400">{t.passwordMismatch}</p>
             )}
           </div>
 
           <motion.button
             whileTap={{ scale: 0.98 }}
             type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-violet-600 to-fuchsia-600 py-2.5 font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110 disabled:opacity-70"
+            disabled={!canSubmit}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 py-2.5 font-semibold text-white shadow-lg shadow-violet-600/30 transition-all hover:brightness-110 disabled:opacity-50"
           >
             {loading && (
               <span aria-hidden className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
@@ -202,7 +187,7 @@ export default function RegisterPage() {
             {loading ? t.connecting : t.registerButton}
           </motion.button>
 
-          <PendingStatus active={loading} serverUrl={SUPABASE_URL} />
+          <PendingStatus active={loading} />
 
           {timedOut && (
             <button
