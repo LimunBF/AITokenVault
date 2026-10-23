@@ -60,6 +60,38 @@ body {
   50% { background-position: 100% 50%; }
 }
 
+/* Pengaman: kalau animasi Framer Motion nyangkut (elemen tetap opacity:0
+   karena transisi gak pernah selesai), paksa jadi kelihatan setelah 2.5s.
+   Animasi dekoratif boleh gagal — konten gak boleh invisible. */
+@keyframes atv-force-visible {
+  to { opacity: 1 !important; }
+}
+
+@keyframes atv-force-transform {
+  to { transform: none !important; }
+}
+
+/* Framer Motion menulis style inline (opacity:0), jadi butuh !important
+   untuk menang. Delay 2.5s = animasi normal (max ~0.6s) pasti selesai dulu. */
+@media (prefers-reduced-motion: no-preference) {
+  .atv-grid-safe > *,
+  .atv-page-safe {
+    animation:
+      atv-force-visible 100ms linear 2.5s forwards,
+      atv-force-transform 100ms linear 2.5s forwards !important;
+  }
+}
+
+/* Kalau user minta reduced motion, jangan animasi sama sekali. */
+@media (prefers-reduced-motion: reduce) {
+  .atv-grid-safe > *,
+  .atv-page-safe {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }

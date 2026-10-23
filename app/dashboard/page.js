@@ -17,7 +17,6 @@ import { useGuard } from '@/hooks/use-guard';
 export default function DashboardPage() {
   const { user, profile, ready } = useGuard();
   const [providers, setProviders] = useState([]);
-  const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -54,17 +53,26 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, user]);
 
-  // Filter providers by search + kategori
-  useEffect(() => {
+  // Filter providers by search + kategori.
+  // Dihitung langsung (useMemo), BUKAN state + useEffect: kalau pakai state,
+  // ada satu render di mana `filtered` masih [] padahal data sudah ada.
+  // Render kosong itu sempat memasang EmptyState (motion.div initial
+  // opacity:0 scale:0.97), lalu React memakai ulang DOM node yang sama untuk
+  // grid provider -> animasi EmptyState ke-interrupt dan kartu nyangkut
+  // invisible (opacity ~0.008). Itu bug "provider gak kelihatan".
+  const filtered = useMemo(() => {
     let result = providers;
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter((p) => p.name.toLowerCase().includes(q) || p.url.toLowerCase().includes(q));
+      result = result.filter(
+        (p) =>
+          (p.name || '').toLowerCase().includes(q) || (p.url || '').toLowerCase().includes(q)
+      );
     }
     if (categoryFilter !== 'all') {
       result = result.filter((p) => (p.category || 'Lainnya') === categoryFilter);
     }
-    setFiltered(result);
+    return result;
   }, [providers, search, categoryFilter]);
 
   const categories = useMemo(() => {
@@ -98,11 +106,7 @@ export default function DashboardPage() {
   const totalTokens = null; // ponytail: jumlah token belum dihitung — nanti kalau perlu statistik di dashboard.
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mx-auto max-w-6xl px-4 py-8"
-    >
+    <div className="atv-page-safe mx-auto max-w-6xl px-4 py-8">
       {/* Header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -170,7 +174,7 @@ export default function DashboardPage() {
           <PendingStatus active />
         </>
       ) : filtered.length === 0 ? (
-        <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
+        <motion.div key="empty" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}>
           <EmptyState
             title={providers.length === 0 ? t.emptyProviders : 'Tidak ada hasil'}
             description={providers.length === 0 ? t.emptyProvidersDesc : 'Coba ubah filter pencarian lo.'}
@@ -188,22 +192,17 @@ export default function DashboardPage() {
         </motion.div>
       ) : (
         <motion.div
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          initial="hide"
-          animate="show"
-          variants={{
-            hide: {},
-            show: { transition: { staggerChildren: 0.07 } },
-          }}
+          key="grid"
+          className="atv-grid-safe grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          initial={false}
         >
           {filtered.map((provider) => (
             <motion.div
               key={provider.id}
               className="h-full"
-              variants={{
-                hide: { opacity: 0, y: 14 },
-                show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 26 } },
-              }}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 26 }}
             >
               <ProviderCard
                 provider={provider}
@@ -226,6 +225,6 @@ export default function DashboardPage() {
         confirmText={t.yesDelete}
         danger
       />
-    </motion.div>
+    </div>
   );
 }
