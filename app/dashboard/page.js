@@ -191,12 +191,19 @@ export default function DashboardPage() {
           className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
           initial="hide"
           animate="show"
-          variants={{ show: { transition: { staggerChildren: 0.07 } } }}
+          variants={{
+            hide: {},
+            show: { transition: { staggerChildren: 0.07 } },
+          }}
         >
           {filtered.map((provider) => (
             <motion.div
               key={provider.id}
-              variants={{ show: { opacity: 1, y: 0 }, hide: { opacity: 0, y: 14 } }}
+              className="h-full"
+              variants={{
+                hide: { opacity: 0, y: 14 },
+                show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 26 } },
+              }}
             >
               <ProviderCard
                 provider={provider}
