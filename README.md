@@ -231,29 +231,4 @@ Temuan: 0
 SEMUA AMAN
 ```
 
-**Catatan:** Di mode dev dengan `DISABLE_RATE_LIMIT=1`, `checkOrigin()` juga dimatikan (berguna untuk test E2E). Di production dan mode test keamanan, origin validation selalu aktif — `POST /api/* ` dari domain luar → 403.
-
----
-
-## Deploy ke cPanel
-
-Butuh **Node.js Selector** (CloudLinux) di cPanel. Lihat `README-DEPLOY.md` untuk langkah lengkap. Ringkasnya:
-
-1. cPanel → **Setup Node.js App** → versi **18** atau lebih baru
-2. Application root: folder project, Application startup file: `server.js`
-3. Upload kode (Git Version Control atau File Manager)
-4. Isi environment variables: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `TOKEN_ENCRYPTION_KEY`, `NEXT_PUBLIC_APP_URL=https://vault.limun.web.id`
-5. Terminal cPanel: `npm install && npm run build`
-6. **Restart** app
-
-Catatan resource untuk paket terbatas (1 CPU / 1 GB RAM):
-
-- `connectionLimit: 5` di `lib/db.js` — jangan dinaikkan
-- Build berat; kalau gagal: `NODE_OPTIONS=--max-old-space-size=512 npm run build`
-- Alternatif: build di lokal, upload folder `.next`
-
----
-
-## Lisensi
-
 MIT
