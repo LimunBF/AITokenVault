@@ -242,7 +242,7 @@ Butuh **Node.js Selector** (CloudLinux) di cPanel. Lihat `README-DEPLOY.md` untu
 1. cPanel → **Setup Node.js App** → versi **18** atau lebih baru
 2. Application root: folder project, Application startup file: `server.js`
 3. Upload kode (Git Version Control atau File Manager)
-4. Isi 5 environment variable (`DB_*`, `TOKEN_ENCRYPTION_KEY`)
+4. Isi environment variables: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `TOKEN_ENCRYPTION_KEY`, `NEXT_PUBLIC_APP_URL=https://vault.limun.web.id`
 5. Terminal cPanel: `npm install && npm run build`
 6. **Restart** app
 
