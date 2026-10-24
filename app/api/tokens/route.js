@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { query, queryOne, run } from '@/lib/db';
 import { getSessionUser, unauthorized } from '@/lib/auth';
 import { encryptToken } from '@/lib/crypto';
+import { safeError, readJson, checkOrigin } from '@/lib/security';
 
 // token_encrypted/token_iv jangan pernah keluar ke client.
 const PUBLIC_COLS =
@@ -33,21 +34,29 @@ export async function GET(request) {
 
     return Response.json(rows);
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }
 
 export async function POST(request) {
   try {
+    const origin = checkOrigin(request);
+    if (!origin.ok) return Response.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
     const user = await getSessionUser();
     if (!user) return unauthorized();
 
-    const { provider_id, label, token, status = 'active', notes } = await request.json();
+    const { provider_id, label, token, status = 'active', notes } = await readJson(request);
     if (!provider_id || !label || !token) {
       return Response.json(
         { error: 'Provider, label, dan token wajib diisi.' },
         { status: 400 }
       );
+    }
+    if (String(label).length > 255) {
+      return Response.json({ error: 'Label maksimal 255 karakter.' }, { status: 400 });
+    }
+    if (String(token).length > 4096) {
+      return Response.json({ error: 'Token maksimal 4096 karakter.' }, { status: 400 });
     }
     if (!['active', 'expired', 'out_of_quota'].includes(status)) {
       return Response.json({ error: 'Status gak valid.' }, { status: 400 });
@@ -86,6 +95,6 @@ export async function POST(request) {
     );
     return Response.json(row, { status: 201 });
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }

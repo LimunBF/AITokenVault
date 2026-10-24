@@ -4,6 +4,7 @@
 // DELETE: hapus provider (token ikut kehapus via ON DELETE CASCADE)
 import { query, queryOne, run } from '@/lib/db';
 import { getSessionUser, unauthorized } from '@/lib/auth';
+import { safeUrl, safeError, readJson, checkOrigin } from '@/lib/security';
 
 function shape(row) {
   let tags = [];
@@ -34,7 +35,7 @@ export async function GET(request, { params }) {
 
     return Response.json({ ...shape(provider), tokens });
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }
 
@@ -48,12 +49,29 @@ const FIELDS = {
 
 export async function PUT(request, { params }) {
   try {
+    const origin = checkOrigin(request);
+    if (!origin.ok) return Response.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
     const user = await getSessionUser();
     if (!user) return unauthorized();
 
-    const body = await request.json();
+    const body = await readJson(request);
     const sets = [];
     const values = [];
+
+    // Validasi URL di PUT juga — kalau tidak, XSS bisa masuk lewat update.
+    if (body.url !== undefined) {
+      const cleanUrl = safeUrl(body.url);
+      if (!cleanUrl) {
+        return Response.json(
+          { error: 'URL harus diawali http:// atau https://' },
+          { status: 400 }
+        );
+      }
+      body.url = cleanUrl;
+    }
+    if (body.name !== undefined && String(body.name).length > 255) {
+      return Response.json({ error: 'Nama maksimal 255 karakter.' }, { status: 400 });
+    }
 
     for (const [key, col] of Object.entries(FIELDS)) {
       if (body[key] !== undefined) {
@@ -79,12 +97,14 @@ export async function PUT(request, { params }) {
     const row = await queryOne('SELECT * FROM atv_providers WHERE id = ?', [params.id]);
     return Response.json(shape(row));
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }
 
 export async function DELETE(request, { params }) {
   try {
+    const origin = checkOrigin(request);
+    if (!origin.ok) return Response.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
     const user = await getSessionUser();
     if (!user) return unauthorized();
 
@@ -96,6 +116,6 @@ export async function DELETE(request, { params }) {
 
     return Response.json({ success: true });
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }

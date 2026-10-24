@@ -3,6 +3,7 @@
 // PATCH: approve / reject / soft-delete (admin)
 import { query, queryOne, run } from '@/lib/db';
 import { getSessionUser, unauthorized } from '@/lib/auth';
+import { safeError, readJson, checkOrigin } from '@/lib/security';
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -23,16 +24,18 @@ export async function GET() {
     );
     return Response.json(rows);
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }
 
 export async function PATCH(request) {
   try {
+    const origin = checkOrigin(request);
+    if (!origin.ok) return Response.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
     const admin = await requireAdmin();
     if (!admin) return unauthorized();
 
-    const { user_id, action } = await request.json();
+    const { user_id, action } = await readJson(request);
     if (!user_id) return Response.json({ error: 'user_id wajib' }, { status: 400 });
 
     // Admin gak boleh ngehapus/reject dirinya sendiri.
@@ -65,6 +68,6 @@ export async function PATCH(request) {
     );
     return Response.json(row);
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }

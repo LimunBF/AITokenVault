@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { getSessionUser } from '@/lib/auth';
+import { safeError } from '@/lib/security';
 
 export async function GET() {
   try {
@@ -9,6 +10,6 @@ export async function GET() {
     if (!user) return Response.json({ user: null });
     return Response.json({ user });
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }

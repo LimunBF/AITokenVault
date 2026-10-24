@@ -4,6 +4,7 @@
 // DELETE: soft delete (set deleted_at)
 import { queryOne, run } from '@/lib/db';
 import { getSessionUser, unauthorized } from '@/lib/auth';
+import { safeError, readJson, checkOrigin } from '@/lib/security';
 import { decryptToken } from '@/lib/crypto';
 
 const PUBLIC_COLS = 'id, provider_id, label, status, notes, created_at, updated_at';
@@ -24,16 +25,18 @@ export async function GET(request, { params }) {
     const plaintext = await decryptToken(row.token_encrypted, row.token_iv);
     return Response.json({ token: plaintext });
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }
 
 export async function PATCH(request, { params }) {
   try {
+    const origin = checkOrigin(request);
+    if (!origin.ok) return Response.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
     const user = await getSessionUser();
     if (!user) return unauthorized();
 
-    const { status, notes, label } = await request.json();
+    const { status, notes, label } = await readJson(request);
     const sets = [];
     const values = [];
 
@@ -69,12 +72,14 @@ export async function PATCH(request, { params }) {
     );
     return Response.json(row);
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }
 
 export async function DELETE(request, { params }) {
   try {
+    const origin = checkOrigin(request);
+    if (!origin.ok) return Response.json({ error: 'Origin tidak diizinkan.' }, { status: 403 });
     const user = await getSessionUser();
     if (!user) return unauthorized();
 
@@ -86,6 +91,6 @@ export async function DELETE(request, { params }) {
 
     return Response.json({ success: true });
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return safeError(err, "api");
   }
 }
